@@ -20,6 +20,7 @@ const PROVIDER_LABELS: Record<AiModelProvider, string> = {
   anthropic: 'Anthropic',
   openai: 'OpenAI',
   google: 'Google',
+  xai: 'xAI (Grok)',
   cloudflare: 'Cloudflare Workers AI',
   ollama: 'Ollama',
 }
@@ -29,6 +30,7 @@ const API_TOKEN_PLACEHOLDERS: Record<AiModelProvider, string> = {
   anthropic: 'sk-ant-...',
   openai: 'sk-...',
   google: 'AIza...',
+  xai: 'xai-...',
   cloudflare: 'Cloudflare API token',
   ollama: '(optional)',
 }

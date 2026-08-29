@@ -37,7 +37,7 @@ function env(overrides: Partial<Cloudflare.Env> = {}): Cloudflare.Env {
     CF_AI_GATEWAY: "platform-gateway",
     CF_AI_GATEWAY_ACCOUNT_ID: "gateway-account-id",
     CF_AI_GATEWAY_API_TOKEN: "gateway-token",
-    CF_AI_GATEWAY_PROVIDERS: "anthropic,openai,google",
+    CF_AI_GATEWAY_PROVIDERS: "anthropic,openai,google,xai",
     ...overrides,
   } as Cloudflare.Env;
 }
@@ -122,6 +122,45 @@ describe("getModel AI Gateway routing", () => {
       accountId: "gateway-account-id",
       apiToken: "gateway-token",
     });
+  });
+
+  it("routes Grok flagships through the gateway's grok passthrough", async () => {
+    const handle = getModel(env(), {
+      provider: "xai",
+      model: "grok-4.6",
+      apiToken: "ignored-in-gateway-mode",
+    }, INITIATOR);
+
+    // Newer Grok models are not yet in pi's catalog; default to the Responses API that xAI
+    // documents for grok-4.6 (and that the catalog already uses for grok-4.5).
+    expect(handle.model.api).toBe("openai-responses");
+    expect(handle.model.id).toBe("grok-4.6");
+    expect(handle.model.baseUrl).toBe(
+        "https://gateway.ai.cloudflare.com/v1/gateway-account-id/platform-gateway/grok");
+    expect(handle.aiGatewayLogRoute).toEqual({
+      gateway: "platform-gateway",
+      accountId: "gateway-account-id",
+      apiToken: "gateway-token",
+    });
+
+    const request = await captureRequest(handle);
+    expect(request.url).toBe(
+        "https://gateway.ai.cloudflare.com/v1/gateway-account-id/platform-gateway/grok/" +
+        "responses");
+    expect(request.headers.get("cf-aig-authorization")).toBe("Bearer gateway-token");
+    expect(request.headers.get("authorization")).toBeNull();
+  }, 15000);
+
+  it("uses the catalog Chat Completions API for cheaper Grok models", () => {
+    const handle = getModel(env(), {
+      provider: "xai",
+      model: "grok-4.3",
+      apiToken: "ignored-in-gateway-mode",
+    }, INITIATOR);
+
+    expect(handle.model.api).toBe("openai-completions");
+    expect(handle.model.baseUrl).toBe(
+        "https://gateway.ai.cloudflare.com/v1/gateway-account-id/platform-gateway/grok");
   });
 
   it("preserves gadget automation metadata", async () => {
@@ -312,6 +351,22 @@ describe("getModel direct routing (no gateway)", () => {
         { ...WORKERS_AI_CONFIG, ...overrides }, INITIATOR))
         .toThrow("This Workers AI model has no Cloudflare credentials.");
   });
+
+  it("uses xAI defaults and the config's own credentials", async () => {
+    const handle = getModel(env({ CF_AI_GATEWAY: undefined }), {
+      provider: "xai",
+      model: "grok-4.6",
+      apiToken: "direct-xai-token",
+    }, INITIATOR);
+
+    expect(handle.model.api).toBe("openai-responses");
+    expect(handle.model.baseUrl).toBe("https://api.x.ai/v1");
+    expect(handle.aiGatewayLogRoute).toBeUndefined();
+
+    const request = await captureRequest(handle);
+    expect(request.url).toBe("https://api.x.ai/v1/responses");
+    expect(request.headers.get("authorization")).toBe("Bearer direct-xai-token");
+  }, 15000);
 
   it("appends /v1 to an Ollama server base URL", () => {
     const handle = getModel(env({ CF_AI_GATEWAY: undefined }), {

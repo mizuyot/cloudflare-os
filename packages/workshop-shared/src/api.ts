@@ -917,7 +917,7 @@ export type CloudflareAccountOption = {
 };
 
 // Supported AI providers.
-export type AiModelProvider = "openai" | "anthropic" | "google" | "cloudflare" | "ollama";
+export type AiModelProvider = "openai" | "anthropic" | "google" | "xai" | "cloudflare" | "ollama";
 
 // Information about the AI gateway configuration. Returned by `AuthenticatedApi.getAiConfig()`.
 export type AiGatewayInfo = {
@@ -981,7 +981,12 @@ export const SUGGESTED_MODELS: Record<
     "gpt-5.6-terra": {name: "GPT 5.6 Terra", contextWindow: 1050000, outputLimit: 128000},
   },
   "google": {
-    "gemini-3.6-flash": {name: "Gemini 3.6 Flash", contextWindow: 1048576},
+    "gemini-3.7-flash": {name: "Gemini 3.7 Flash", contextWindow: 1048576},
+    "gemini-3.5-flash-lite": {name: "Gemini 3.5 Flash Lite", contextWindow: 1048576},
+  },
+  "xai": {
+    "grok-4.6": {name: "Grok 4.6", contextWindow: 500000},
+    "grok-4.3": {name: "Grok 4.3", contextWindow: 1000000},
   },
   "ollama": {
   },

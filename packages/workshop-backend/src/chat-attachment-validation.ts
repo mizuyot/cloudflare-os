@@ -36,6 +36,9 @@ const ATTACHMENT_SUPPORT_BY_PROVIDER = {
   anthropic: isTextImageOrPdfMime,
   openai: isTextImageOrPdfMime,
   google: isTextImageOrPdfMime,
+  // Grok flagships use the Responses API, but cheaper catalog entries still speak Chat
+  // Completions, which has no document input. Images are universal across both.
+  xai: isTextOrImageMime,
   cloudflare: isTextOrImageMime,
   ollama: isTextOrImageMime,
 } satisfies Record<AiModelProvider, (mimeType: string) => boolean>;

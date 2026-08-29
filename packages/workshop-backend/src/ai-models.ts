@@ -12,6 +12,7 @@ import { ANTHROPIC_MODELS } from "@earendil-works/pi-ai/providers/anthropic.mode
 import { CLOUDFLARE_WORKERS_AI_MODELS } from "@earendil-works/pi-ai/providers/cloudflare-workers-ai.models";
 import { GOOGLE_MODELS } from "@earendil-works/pi-ai/providers/google.models";
 import { OPENAI_MODELS } from "@earendil-works/pi-ai/providers/openai.models";
+import { XAI_MODELS } from "@earendil-works/pi-ai/providers/xai.models";
 import { ApprovalQueue, Gatekeeper, ResourceDescription, stripTrailingSlashes } from '@gadgets/workshop-shared/gatekeeper';
 import { LanguageModelBinding } from "./ai-model-binding";
 import AI_MODEL_BINDING_TYPES from "./ai-model-binding.txt";
@@ -122,6 +123,7 @@ function catalogModel(provider: AiModelConfig["provider"], modelId: string): Mod
     case "anthropic": return (ANTHROPIC_MODELS as Record<string, Model<Api>>)[modelId];
     case "openai": return (OPENAI_MODELS as Record<string, Model<Api>>)[modelId];
     case "google": return (GOOGLE_MODELS as Record<string, Model<Api>>)[modelId];
+    case "xai": return (XAI_MODELS as Record<string, Model<Api>>)[modelId];
     case "cloudflare": return (CLOUDFLARE_WORKERS_AI_MODELS as Record<string, Model<Api>>)[modelId];
     case "ollama": return undefined;
     default: return undefined;
@@ -214,6 +216,22 @@ function gatewayNativeModel(config: AiModelConfig, gatewayUrl: string): Model<Ap
         cost: catalog?.cost ?? ZERO_COST,
         ...window,
         thinkingLevelMap: catalog?.thinkingLevelMap,
+      };
+    case "xai":
+      // xAI's native APIs (Responses for current flagships, Chat Completions for some
+      // cheaper models) sit under the gateway's /grok path, which replaces api.x.ai/v1.
+      return {
+        id: config.model,
+        name: catalog?.name ?? config.model,
+        api: catalog?.api ?? "openai-responses",
+        provider: "xai",
+        baseUrl: `${gatewayUrl}/grok`,
+        reasoning: catalog?.reasoning ?? true,
+        input: catalog?.input ?? ["text", "image"],
+        cost: catalog?.cost ?? ZERO_COST,
+        ...window,
+        thinkingLevelMap: catalog?.thinkingLevelMap,
+        compat: catalog?.compat,
       };
     case "cloudflare":
       // Workers AI's own OpenAI-compatible endpoint, exposed through the gateway's workers-ai
@@ -577,6 +595,24 @@ function getModelDirect(config: AiModelConfig, sessionAffinity?: string): ModelH
           api: "openai-responses",
           provider: "openai",
           baseUrl: config.apiUrl ?? "https://api.openai.com/v1",
+          reasoning: catalog?.reasoning ?? true,
+          input: catalog?.input ?? ["text", "image"],
+          cost: catalog?.cost ?? ZERO_COST,
+          ...window,
+          thinkingLevelMap: catalog?.thinkingLevelMap,
+          compat: catalog?.compat,
+        },
+        apiKey: config.apiToken,
+        sessionAffinity,
+      });
+    case "xai":
+      return makeHandle({
+        model: {
+          id: config.model,
+          name: catalog?.name ?? config.model,
+          api: catalog?.api ?? "openai-responses",
+          provider: "xai",
+          baseUrl: config.apiUrl ?? "https://api.x.ai/v1",
           reasoning: catalog?.reasoning ?? true,
           input: catalog?.input ?? ["text", "image"],
           cost: catalog?.cost ?? ZERO_COST,
