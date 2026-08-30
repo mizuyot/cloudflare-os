@@ -1,0 +1,2 @@
+# Marker file: build the Discord configurator iframe to speak structured-clone
+# MessagePort frames, matching newer hosted Workshop frontends (Cap'n Web >= 0.9).

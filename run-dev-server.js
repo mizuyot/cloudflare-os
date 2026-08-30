@@ -177,6 +177,7 @@ const SHARED_GATEKEEPER_CREDS = {
   "gatekeeper-zoominfo": { id: "ZOOMINFO_CLIENT_ID", secret: "ZOOMINFO_CLIENT_SECRET" },
   "gatekeeper-confluence": { id: "CONFLUENCE_CLIENT_ID", secret: "CONFLUENCE_CLIENT_SECRET" },
   "gatekeeper-slack": { id: "SLACK_CLIENT_ID", secret: "SLACK_CLIENT_SECRET" },
+  "gatekeeper-discord": { id: "DISCORD_CLIENT_ID", secret: "DISCORD_CLIENT_SECRET" },
 };
 
 // Deployment-configured vars a gatekeeper reads that its committed `wrangler.jsonc` deliberately
@@ -204,6 +205,12 @@ for (const gk of gatekeepers) {
     config.vars = config.vars || {};
     if (config.vars.CLIENT_ID === undefined) config.vars.CLIENT_ID = process.env[shared.id];
     if (config.vars.CLIENT_SECRET === undefined) config.vars.CLIENT_SECRET = process.env[shared.secret];
+  }
+
+  if (gk.name === "gatekeeper-discord" && process.env.DISCORD_BOT_TOKEN &&
+      config.vars?.BOT_TOKEN === undefined) {
+    config.vars = config.vars || {};
+    config.vars.BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
   }
 
   // The shell wins over the committed default, so `MCP_ALLOW_INSECURE=true` can override the

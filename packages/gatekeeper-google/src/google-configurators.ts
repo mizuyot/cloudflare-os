@@ -7,6 +7,7 @@ import type { BigQueryConfiguratorRpc } from "./configurator/bigquery-configurat
 import type { CalendarConfiguratorRpc } from "./configurator/calendar-configurator-types";
 import type { GmailConfiguratorRpc } from "./configurator/gmail-configurator-types";
 import type { GoogleDocConfiguratorRpc } from "./configurator/google-doc-configurator-types";
+import type { GoogleDriveConfiguratorRpc } from "./configurator/google-drive-configurator-types";
 import type { GoogleSheetsConfiguratorRpc } from "./configurator/google-sheets-configurator-types";
 
 type ConfiguratorOption = { value: string; title: string; subtitle?: string; meta?: string };
@@ -238,6 +239,20 @@ export class GoogleSheetsConfiguratorUI extends RpcTarget implements GoogleSheet
   async listSpreadsheets(query: string): Promise<ConfiguratorOption[]> {
     return listDriveFiles(
       this, query, "application/vnd.google-apps.spreadsheet", "Google Sheets",
+    );
+  }
+}
+
+@validateRpc()
+export class GoogleDriveConfiguratorUI extends RpcTarget implements GoogleDriveConfiguratorRpc {
+  constructor(getToken: () => Promise<GoogleAccessToken>) {
+    super();
+    googleTokenGetters.set(this, getToken);
+  }
+
+  async listFolders(query: string): Promise<ConfiguratorOption[]> {
+    return listDriveFiles(
+      this, query, "application/vnd.google-apps.folder", "Google Drive folders",
     );
   }
 }

@@ -12,6 +12,16 @@ import { GoogleSheetsApi } from "./sheets-api";
 import type {
   GoogleSpreadsheetSession, SpreadsheetInfo, SpreadsheetRange, SpreadsheetValueMode,
 } from "./sheets-types";
+import {
+  collectFolderTree, fileIsUnderFolder, FOLDER_TREE_TTL_MS, GoogleDriveApi,
+  readDriveFileText, toDriveFileInfo,
+} from "./drive-api";
+import {
+  buildDriveListQuery, buildDriveSearchQuery, chunkIds, driveFolderUrl, parseDriveFolderId,
+} from "./drive-url";
+import type {
+  DriveFileInfo, DriveFolderInfo, DriveItemEntry, GoogleDriveFile, GoogleDriveFolderSession,
+} from "./drive-types";
 import { docToMarkdown, markdownToDocRequests, computeReplaceOperations, DocSnapshot } from "./markdown-converter";
 import { BigQueryApi, DEFAULT_MAX_BYTES_BILLED } from "./bigquery-api";
 import {
@@ -32,11 +42,13 @@ import DOCS_TYPES_CODE from "./docs-types.txt";
 import BIGQUERY_TYPES_CODE from "./bigquery-types.txt";
 import CALENDAR_TYPES_CODE from "./calendar-types.txt";
 import SHEETS_TYPES_CODE from "./sheets-types.txt";
+import DRIVE_TYPES_CODE from "./drive-types.txt";
 import {
   BigQueryConfiguratorUI,
   CalendarConfiguratorUI,
   GmailConfiguratorUI,
   GoogleDocConfiguratorUI,
+  GoogleDriveConfiguratorUI,
   GoogleSheetsConfiguratorUI,
 } from "./google-configurators";
 import BIGQUERY_CONFIGURATOR_HTML from "./generated/bigquery-configurator-ui.txt";
@@ -44,6 +56,7 @@ import CALENDAR_CONFIGURATOR_HTML from "./generated/calendar-configurator-ui.txt
 import GMAIL_CONFIGURATOR_HTML from "./generated/gmail-configurator-ui.txt";
 import GOOGLE_DOC_CONFIGURATOR_HTML from "./generated/google-doc-configurator-ui.txt";
 import GOOGLE_SHEETS_CONFIGURATOR_HTML from "./generated/google-sheets-configurator-ui.txt";
+import GOOGLE_DRIVE_CONFIGURATOR_HTML from "./generated/google-drive-configurator-ui.txt";
 import GOOGLE_LOGO_SVG from "./google-logo.svg";
 import { obsContext } from "./observability.js";
 import { AccessTokenCache, AccessTokenRequest, ACCESS_TOKEN_EXPIRY_SAFETY_MS } from "./auth-retry";
@@ -246,6 +259,13 @@ const GOOGLE_SHEETS_RESOURCE: SupportedResource = {
   grantable: true,
 };
 
+const GOOGLE_DRIVE_FOLDER_RESOURCE: SupportedResource = {
+  urlPattern: "https://drive.google.com/drive/folders/:folderId",
+  title: "Google Drive Folder",
+  description: "Search and read files inside a Drive folder you choose, including nested folders.",
+  grantable: true,
+};
+
 const GOOGLE_CALENDAR_RESOURCE: SupportedResource = {
   urlPattern: "https://calendar.google.com/calendar/:calendarId/*",
   title: "Google Calendar",
@@ -291,6 +311,13 @@ const RESOURCE_SCOPES: {resource: SupportedResource, scopes: string[]}[] = [
       "https://www.googleapis.com/auth/spreadsheets.readonly",
       // Read-only Drive file metadata, used to power the spreadsheet picker.
       "https://www.googleapis.com/auth/drive.metadata.readonly",
+    ],
+  },
+  {
+    resource: GOOGLE_DRIVE_FOLDER_RESOURCE,
+    scopes: [
+      // Folder tree search and file body reads (export / media download).
+      "https://www.googleapis.com/auth/drive.readonly",
     ],
   },
   {
@@ -439,12 +466,12 @@ export class GatekeeperVendor extends WorkerEntrypoint<Env> implements Gatekeepe
       url: "https://google.com",
       logo: { url: GOOGLE_LOGO_URL },
       color: "#e8f0fe",
-      tagline: "Draft replies, edit docs, read sheets, manage calendars, and analyze data",
+      tagline: "Draft replies, edit docs, search Drive folders, manage calendars, and analyze data",
       description:
           "Connect your Google account to give Cloudflare OS access to Gmail, Google Docs, Google " +
-          "Sheets, Google Calendar, and BigQuery. Build agents that triage email, draft and edit " +
-          "documents, read spreadsheets, find focus time, schedule meetings, or run analytics " +
-          "queries on your data.",
+          "Sheets, Drive folders, Google Calendar, and BigQuery. Build agents that triage email, " +
+          "draft and edit documents, search a Drive folder, find focus time, schedule meetings, " +
+          "or run analytics queries on your data.",
       providesAuth: true,
     };
   }
@@ -478,7 +505,8 @@ export class GatekeeperVendor extends WorkerEntrypoint<Env> implements Gatekeepe
 
   async getTypeScriptTypes(): Promise<string> {
     return [
-      TYPES_CODE, DOCS_TYPES_CODE, SHEETS_TYPES_CODE, CALENDAR_TYPES_CODE, BIGQUERY_TYPES_CODE,
+      TYPES_CODE, DOCS_TYPES_CODE, SHEETS_TYPES_CODE, DRIVE_TYPES_CODE, CALENDAR_TYPES_CODE,
+      BIGQUERY_TYPES_CODE,
     ].join("\n");
   }
 }
@@ -865,6 +893,18 @@ export class GatekeeperUserImpl extends WorkerEntrypoint<Env, GatekeeperUserImpl
       };
     }
 
+    let driveFolderId = parseDriveFolderId(url);
+    if (driveFolderId) {
+      let props: GoogleDriveFolderGatekeeperImplProps = {
+        userObjectId: this.ctx.props.userObjectId,
+        folderId: driveFolderId,
+      };
+      return {
+        class: this.ctx.exports.GoogleDriveFolderGatekeeperImpl({ props }),
+        resource: GOOGLE_DRIVE_FOLDER_RESOURCE,
+      };
+    }
+
     if (parsed.hostname === "calendar.google.com" && parsed.pathname.startsWith("/calendar/")) {
       let calendarId = decodeURIComponent(parsed.pathname.split("/")[2] ?? "");
       if (!calendarId) {
@@ -998,6 +1038,13 @@ export class GatekeeperUserImpl extends WorkerEntrypoint<Env, GatekeeperUserImpl
       };
     }
 
+    if (resourceUrlPattern === GOOGLE_DRIVE_FOLDER_RESOURCE.urlPattern) {
+      return {
+        iframeHtml: GOOGLE_DRIVE_CONFIGURATOR_HTML,
+        ui: new RpcStub(new GoogleDriveConfiguratorUI(getToken)),
+      };
+    }
+
     throw new Error(`Unsupported resource configurator type: ${resourceUrlPattern}`);
   }
 
@@ -1054,8 +1101,10 @@ export class GatekeeperUserImpl extends WorkerEntrypoint<Env, GatekeeperUserImpl
 //     consulted (but must exist).
 //   - Google Doc — strategy B (ACL check, single unit): hasDocAccess answers whether the observer's
 //     own token can open the bound document (Docs API returns 401/403/404 otherwise).
-//   - Google Sheets — strategy B (ACL check, single unit): hasSpreadsheetAccess answers whether the
-//     observer's own token can open the bound spreadsheet.
+  //   - Google Sheets — strategy B (ACL check, single unit): hasSpreadsheetAccess answers whether the
+  //     observer's own token can open the bound spreadsheet.
+  //   - Google Drive Folder — strategy B (ACL check, single unit): hasFolderAccess answers whether
+  //     the observer's own token can open the bound folder.
 //   - Google Calendar — strategies B/C: hasCalendarWriterAccess covers the bound calendar, while
 //     hasCalendarFreeBusyAccess covers foreign calendars read by an all-visible availability query.
 //   - BigQuery — strategy C (data-set tracking by dataset): hasDatasetAccess answers whether the
@@ -1086,6 +1135,7 @@ function isNoAccessStatus(status: number | undefined): boolean {
 export interface GoogleVerifierApi extends GatekeeperUserVerifier {
   hasDocAccess(documentId: string): Promise<boolean>;
   hasSpreadsheetAccess(spreadsheetId: string): Promise<boolean>;
+  hasFolderAccess(folderId: string): Promise<boolean>;
   hasCalendarWriterAccess(calendarId: string): Promise<boolean>;
   hasCalendarFreeBusyAccess(calendarId: string): Promise<boolean>;
   hasDatasetAccess(projectId: string, datasetId: string): Promise<boolean>;
@@ -1123,6 +1173,17 @@ export class GoogleVerifier extends WorkerEntrypoint<Env, GoogleVerifierProps>
     let api = new GoogleSheetsApi(opts => this.#getToken(opts));
     try {
       await api.getSpreadsheet(spreadsheetId);
+      return true;
+    } catch (error) {
+      if (isNoAccessStatus(httpStatusFromError(error))) return false;
+      throw error;
+    }
+  }
+
+  async hasFolderAccess(folderId: string): Promise<boolean> {
+    let api = new GoogleDriveApi(opts => this.#getToken(opts));
+    try {
+      await api.getFolder(folderId);
       return true;
     } catch (error) {
       if (isNoAccessStatus(httpStatusFromError(error))) return false;
@@ -2586,6 +2647,298 @@ export class GoogleSheetsGatekeeperImpl
   }
 
   async removeObserver(_id: string): Promise<void> {}
+}
+
+// =======================================================================================
+// Google Drive Folder Gatekeeper
+// =======================================================================================
+
+type GoogleDriveFolderGatekeeperImplProps = {
+  userObjectId: string;
+  folderId: string;
+};
+
+type FolderTreeCache = {
+  folderIds: string[];
+  fetchedAt: number;
+};
+
+@validateRpc()
+export class GoogleDriveFolderGatekeeperImpl
+    extends DurableObject<Env, GoogleDriveFolderGatekeeperImplProps>
+    implements Gatekeeper<GoogleDriveFolderSession> {
+  #tokens = new AccessTokenCache(opts => {
+    let account = this.ctx.exports.UserAccount.get(
+      this.ctx.exports.UserAccount.idFromString(this.ctx.props.userObjectId),
+    );
+    return account.getAccessToken(opts);
+  });
+
+  async #getAccessToken(opts?: AccessTokenRequest): Promise<string> {
+    return this.#tokens.get(opts);
+  }
+
+  async #api(): Promise<GoogleDriveApi> {
+    return new GoogleDriveApi(opts => this.#getAccessToken(opts));
+  }
+
+  async #folderIds(): Promise<string[]> {
+    let cached = this.ctx.storage.kv.get<FolderTreeCache>("folderTree");
+    if (cached && Date.now() - cached.fetchedAt < FOLDER_TREE_TTL_MS) {
+      return cached.folderIds;
+    }
+    let folderIds = await collectFolderTree(await this.#api(), this.ctx.props.folderId);
+    this.ctx.storage.kv.put<FolderTreeCache>("folderTree", { folderIds, fetchedAt: Date.now() });
+    return folderIds;
+  }
+
+  async describe(): Promise<ResourceDescription> {
+    let folder = await (await this.#api()).getFolder(this.ctx.props.folderId);
+    return {
+      url: driveFolderUrl(this.ctx.props.folderId),
+      title: folder.name,
+      snippet: `Google Drive folder: ${folder.name} (read-only)`,
+      suggestedBindingName: "GOOGLE_DRIVE_FOLDER",
+      tsType: "GoogleDriveFolderSession",
+    };
+  }
+
+  async getTypeScriptTypes(): Promise<string> {
+    return DRIVE_TYPES_CODE;
+  }
+
+  async getAutoApprovableActions(): Promise<ActionKind[]> {
+    return [];
+  }
+
+  async startSession(approvalQueue: RpcStub<ApprovalQueue>): Promise<GoogleDriveFolderSession> {
+    return new GoogleDriveFolderSessionImpl(
+      await this.#api(),
+      this.ctx.props.folderId,
+      () => this.#folderIds(),
+      approvalQueue.dup(),
+    );
+  }
+
+  async applyAction(_action: number): Promise<void> {
+    throw new Error("Google Drive folders are read-only and implement no actions.");
+  }
+  async rejectAction(_action: number): Promise<void> {
+    throw new Error("Google Drive folders are read-only and implement no actions.");
+  }
+  revertAction(_action: number): Promise<void> {
+    throw new Error("Google Drive folders are read-only and implement no actions.");
+  }
+
+  async addObserver(_id: string, user: Fetcher<GatekeeperUserVerifier>): Promise<void> {
+    let verifier = user as unknown as Fetcher<GoogleVerifierApi>;
+    if (!(await verifier.hasFolderAccess(this.ctx.props.folderId))) {
+      throw new Error(
+        "This collaborator does not have access to the bound Google Drive folder, so they cannot " +
+        "observe data this workspace read from it.",
+      );
+    }
+  }
+
+  async removeObserver(_id: string): Promise<void> {}
+}
+
+class DriveCursor<T> extends RpcTarget implements Cursor<T> {
+  #approvalQueue: RpcStub<ApprovalQueue>;
+  #loadPage: (
+    cursor: string | undefined,
+  ) => Promise<{ items: T[]; nextCursor?: string; observation: ObservationDescription }>;
+  #cursor: string | undefined;
+  #exhausted = false;
+  #tail: Promise<void> = Promise.resolve();
+
+  constructor(
+    approvalQueue: RpcStub<ApprovalQueue>,
+    loadPage: (
+      cursor: string | undefined,
+    ) => Promise<{ items: T[]; nextCursor?: string; observation: ObservationDescription }>,
+  ) {
+    super();
+    this.#approvalQueue = approvalQueue.dup();
+    this.#loadPage = loadPage;
+  }
+
+  [Symbol.dispose]() {
+    this.#approvalQueue[Symbol.dispose]();
+  }
+
+  next(): Promise<T[] | null> {
+    let result = this.#tail.then(() => this.#nextPage());
+    this.#tail = result.then(() => undefined, () => undefined);
+    return result;
+  }
+
+  async #nextPage(): Promise<T[] | null> {
+    while (!this.#exhausted) {
+      let page = await this.#loadPage(this.#cursor);
+      this.#cursor = page.nextCursor;
+      this.#exhausted = !page.nextCursor;
+      if (page.items.length === 0) continue;
+      await this.#approvalQueue.authorizeObservation(page.observation);
+      return page.items;
+    }
+    return null;
+  }
+}
+
+@validateRpc()
+class GoogleDriveFolderSessionImpl extends RpcTarget implements GoogleDriveFolderSession {
+  #api: GoogleDriveApi;
+  #folderId: string;
+  #folderIds: () => Promise<string[]>;
+  #approvalQueue: RpcStub<ApprovalQueue>;
+
+  constructor(
+    api: GoogleDriveApi,
+    folderId: string,
+    folderIds: () => Promise<string[]>,
+    approvalQueue: RpcStub<ApprovalQueue>,
+  ) {
+    super();
+    this.#api = api;
+    this.#folderId = folderId;
+    this.#folderIds = folderIds;
+    this.#approvalQueue = approvalQueue;
+  }
+
+  [Symbol.dispose](): void {
+    this.#approvalQueue[Symbol.dispose]();
+  }
+
+  #entry(info: DriveFileInfo): DriveItemEntry {
+    if (info.kind === "folder") return { info };
+    return {
+      info,
+      file: new GoogleDriveFileImpl(this.#api, info, this.#approvalQueue.dup()),
+    };
+  }
+
+  async getInfo(): Promise<DriveFolderInfo> {
+    let folder = await this.#api.getFolder(this.#folderId);
+    await this.#approvalQueue.authorizeObservation({
+      title: "Read Google Drive folder",
+      description: `Read metadata for Drive folder "${folder.name}".`,
+    });
+    return folder;
+  }
+
+  async list(opts?: { query?: string }): Promise<Cursor<DriveItemEntry>> {
+    let q = buildDriveListQuery(this.#folderId, opts?.query);
+    return new DriveCursor(this.#approvalQueue, async pageToken => {
+      let page = await this.#api.listPage(q, pageToken);
+      let items = page.items.map(file => this.#entry(toDriveFileInfo(file)));
+      return {
+        items,
+        nextCursor: page.nextPageToken,
+        observation: {
+          title: opts?.query
+            ? `List Drive folder matching ${opts.query}`
+            : "List Google Drive folder",
+          description:
+            `Listed ${items.length} item(s) in the connected Drive folder` +
+            (opts?.query ? ` matching "${opts.query}"` : "") + ".",
+        },
+      };
+    });
+  }
+
+  async search(query: string): Promise<Cursor<DriveItemEntry>> {
+    if (query.trim().length === 0) throw new Error("Search query must not be empty.");
+    let folderIds = await this.#folderIds();
+    let chunks = chunkIds(folderIds, 20);
+    let chunkIndex = 0;
+    let pageToken: string | undefined;
+    return new DriveCursor(this.#approvalQueue, async () => {
+      while (chunkIndex < chunks.length) {
+        let q = buildDriveSearchQuery(query, chunks[chunkIndex]!);
+        let page = await this.#api.listPage(q, pageToken);
+        pageToken = page.nextPageToken;
+        if (!pageToken) chunkIndex++;
+        if (page.items.length === 0) continue;
+        let items = page.items.map(file => this.#entry(toDriveFileInfo(file)));
+        return {
+          items,
+          nextCursor: pageToken || chunkIndex < chunks.length ? "more" : undefined,
+          observation: {
+            title: `Drive search: ${query}`,
+            description:
+              `Searched the connected Drive folder for "${query}". Returned ${items.length} ` +
+              "file(s).",
+          },
+        };
+      }
+      return {
+        items: [],
+        observation: {
+          title: `Drive search: ${query}`,
+          description: `Searched the connected Drive folder for "${query}". Returned 0 files.`,
+        },
+      };
+    });
+  }
+
+  async getFile(fileId: string): Promise<GoogleDriveFile> {
+    let folderIds = new Set(await this.#folderIds());
+    let file = await this.#api.getFile(fileId);
+    if (!fileIsUnderFolder(file, folderIds)) {
+      throw new Error("That file is not inside the connected Drive folder.");
+    }
+    let info = toDriveFileInfo(file);
+    if (info.kind === "folder") {
+      throw new Error("getFile() is for files. Use list() or search() to browse folders.");
+    }
+    await this.#approvalQueue.authorizeObservation({
+      title: `Open Drive file ${info.name}`,
+      description: `Opened "${info.name}" in the connected Drive folder.`,
+    });
+    return new GoogleDriveFileImpl(this.#api, info, this.#approvalQueue.dup());
+  }
+}
+
+@validateRpc()
+class GoogleDriveFileImpl extends RpcTarget implements GoogleDriveFile {
+  #api: GoogleDriveApi;
+  #info: DriveFileInfo;
+  #approvalQueue: RpcStub<ApprovalQueue>;
+
+  constructor(
+    api: GoogleDriveApi,
+    info: DriveFileInfo,
+    approvalQueue: RpcStub<ApprovalQueue>,
+  ) {
+    super();
+    this.#api = api;
+    this.#info = info;
+    this.#approvalQueue = approvalQueue;
+  }
+
+  [Symbol.dispose](): void {
+    this.#approvalQueue[Symbol.dispose]();
+  }
+
+  async getMetadata(): Promise<DriveFileInfo> {
+    await this.#approvalQueue.authorizeObservation({
+      title: `Read Drive file ${this.#info.name}`,
+      description: `Read metadata for "${this.#info.name}".`,
+    });
+    return this.#info;
+  }
+
+  async readText(): Promise<string | null> {
+    let text = await readDriveFileText(this.#api, this.#info);
+    await this.#approvalQueue.authorizeObservation({
+      title: `Read Drive file ${this.#info.name}`,
+      description: text === null
+        ? `Could not extract text from "${this.#info.name}". Open it at the file's webViewLink.`
+        : `Read text from "${this.#info.name}" (${text.length.toLocaleString()} character(s)).`,
+    });
+    return text;
+  }
 }
 
 @validateRpc()

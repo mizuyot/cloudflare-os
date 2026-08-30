@@ -214,6 +214,7 @@ Each gatekeeper package contains instructions for how to set it up:
 * [Email Workers](packages/gatekeeper-email/README.md)
 * [Home Assistant](packages/gatekeeper-homeassistant/README.md)
 * [Slack API](packages/gatekeeper-slack/README.md)
+* [Discord API](packages/gatekeeper-discord/README.md)
 * [Spotify](packages/gatekeeper-spotify/README.md)
 * [ZoomInfo API](packages/gatekeeper-zoominfo/README.md)
 

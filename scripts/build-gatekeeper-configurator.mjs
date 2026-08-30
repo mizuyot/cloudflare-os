@@ -1,4 +1,4 @@
-import { watch } from "node:fs";
+import { existsSync, watch } from "node:fs";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import ts from "typescript";
@@ -62,9 +62,41 @@ async function createConfiguratorHtml(configuratorUIModuleSource) {
   const exceptionSerializerImport = frontendReportingEnabled
     ? await createExceptionSerializerImport()
     : "";
+  // Newer hosted frontends speak structured-clone MessagePort frames; Cap'n Web 0.8 still
+  // sends JSON strings. Opt a gatekeeper in with an `iframe-messageport-structured` marker.
+  const structuredPort = existsSync(join(packageDir, "iframe-messageport-structured"));
+  const portAdapter = structuredPort ? `
+function adaptMessagePort(port) {
+  const post = port.postMessage.bind(port);
+  port.postMessage = (data, transfer) => {
+    if (typeof data === "string") {
+      try {
+        post(JSON.parse(data), transfer);
+        return;
+      } catch {}
+    }
+    post(data, transfer);
+  };
+  const add = port.addEventListener.bind(port);
+  port.addEventListener = (type, handler, options) => {
+    if (type !== "message" || typeof handler !== "function") {
+      return add(type, handler, options);
+    }
+    return add(type, event => {
+      if (event.data !== null && typeof event.data !== "string") {
+        handler({ data: JSON.stringify(event.data) });
+        return;
+      }
+      handler(event);
+    }, options);
+  };
+  return port;
+}
+` : "";
   const runtime = `//# sourceURL=${sourceBase}/runtime.js
 import { RpcTarget, newMessagePortRpcSession } from "data:text/javascript;charset=utf-8;base64,${capnwebBase64}";
 ${exceptionSerializerImport}
+${portAdapter}
 
 const frontendReportingEnabled = ${frontendReportingEnabled};
 function reportFrontendIssue(failureSite, caught, options = {}) {
@@ -754,7 +786,7 @@ async function seedInitialValues() {
 async function main() {
   const { port1, port2 } = new MessageChannel();
   window.parent.postMessage({ type: "handshake" }, "*", [port2]);
-  host = newMessagePortRpcSession(port1, new ResourceConfiguratorIframe());
+  host = newMessagePortRpcSession(${structuredPort ? "adaptMessagePort(port1)" : "port1"}, new ResourceConfiguratorIframe());
   ui = host.gatekeeper;
 
   Object.assign(globalThis, { h, Fragment, Section, Field, TextInput, RadioCards, CheckboxList, Autocomplete });

@@ -1,0 +1,26 @@
+[
+  {
+    "name": "CLIENT_ID",
+    "kind": "secret",
+    "label": "OAuth client ID",
+    "consoleUrl": "https://discord.com/developers/applications",
+    "setupSteps": [
+      "Create a Discord application and add a bot user.",
+      "Under OAuth2, add the redirect URL below.",
+      "Enable the Message Content Intent on the bot.",
+      "Invite the bot to the servers it should search (View Channel + Read Message History).",
+      "Copy the application's Client ID and Client Secret here."
+    ],
+    "redirectUriTemplate": "{PUBLIC_BASE_URL}/gatekeeper/discord/oauth"
+  },
+  {
+    "name": "CLIENT_SECRET",
+    "kind": "secret",
+    "label": "OAuth client secret"
+  },
+  {
+    "name": "BOT_TOKEN",
+    "kind": "secret",
+    "label": "Bot token"
+  }
+]
