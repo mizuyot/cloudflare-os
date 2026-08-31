@@ -20,6 +20,9 @@ declare global {
       CF_AI_GATEWAY_PROVIDERS?: string;   // Comma-separated list: "anthropic,openai,google,xai,cloudflare"
       CF_AI_GATEWAY_ACCOUNT_ID?: string;  // Gateway owner account ID (required with CF_AI_GATEWAY)
       CF_AI_GATEWAY_API_TOKEN?: string;   // Run + Read token for inference and cost-log reads
+      AI_GATEWAY_TOKEN?: string;          // Alias for CF_AI_GATEWAY_API_TOKEN (starter secret name)
+      CF_AI_GATEWAY_UNIFIED?: string;     // "true" pins /compat Unified Billing (one model, no picker)
+      CF_AI_GATEWAY_DYNAMIC_ROUTE?: string; // Dynamic Route name; request model becomes dynamic/<name>
       CF_AI_GATEWAY_WAI?: string;         // Optional Workers AI gateway override
       CF_AI_GATEWAY_WAI_DIRECT?: string;  // "true" to route Workers AI to its plain REST endpoint
                                           // (no gateway, no cost logs) instead of a named Gateway

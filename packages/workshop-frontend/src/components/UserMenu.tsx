@@ -1,5 +1,6 @@
 import { useNavigate } from '@tanstack/react-router'
 import { DropdownMenu } from '@cloudflare/kumo'
+import { useEffect, useState } from 'react'
 import { useAuthenticatedApi } from '../AuthContext'
 import { useAvatar } from '../useAvatar'
 import { MENU_CONTENT, MENU_ITEM, MENU_ITEM_DANGER, MENU_POSITIONER_STYLE } from './menuStyles'
@@ -7,6 +8,13 @@ import { MENU_CONTENT, MENU_ITEM, MENU_ITEM_DANGER, MENU_POSITIONER_STYLE } from
 export default function UserMenu() {
   const { authenticatedApi, logout, currentUser, isAdmin } = useAuthenticatedApi()
   const navigate = useNavigate()
+  const [hideProviders, setHideProviders] = useState(false)
+
+  useEffect(() => {
+    void authenticatedApi.getAiConfig().then((config) => {
+      setHideProviders(config.enabled === true && config.hideModelPicker === true)
+    }).catch(() => {})
+  }, [authenticatedApi])
 
   const avatarUrl = useAvatar(authenticatedApi, currentUser?.id)
 
@@ -38,12 +46,14 @@ export default function UserMenu() {
         >
           Profile
         </DropdownMenu.Item>
+        {!hideProviders && (
         <DropdownMenu.Item
           onClick={() => navigate({ to: '/providers' })}
           className={MENU_ITEM}
         >
           Providers
         </DropdownMenu.Item>
+        )}
         {isAdmin && (
           <DropdownMenu.Item
             onClick={() => navigate({ to: '/admin' })}

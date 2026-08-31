@@ -923,6 +923,7 @@ export type AiModelProvider = "openai" | "anthropic" | "google" | "xai" | "cloud
 export type AiGatewayInfo = {
   enabled: true;
   enabledProviders: AiModelProvider[];
+  hideModelPicker?: boolean;
 } | {
   enabled: false;
 };

@@ -7,25 +7,45 @@ import { UserAiModelRecord } from "./user.js";
 // compared to the actual coding model so there's not much reason to use a smaller model.
 const QUICK_MODEL_ID = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 
+// Musapo Unified Billing pin: one catalog entry, OpenAI-compat /compat, no Workers AI.
+export const UNIFIED_PINNED_PROVIDER = "anthropic" as const;
+export const UNIFIED_PINNED_MODEL_ID = "claude-sonnet-4-6";
+export const UNIFIED_PINNED_MODEL_NAME = "Claude Sonnet 4.6";
+export const UNIFIED_PINNED_COMPAT_MODEL = "anthropic/claude-sonnet-4-6";
+
+export function gatewayApiToken(env: Cloudflare.Env): string | undefined {
+  return env.CF_AI_GATEWAY_API_TOKEN || env.AI_GATEWAY_TOKEN;
+}
+
+export function isUnifiedCompatGateway(env: Cloudflare.Env): boolean {
+  return env.CF_AI_GATEWAY_UNIFIED === "true";
+}
+
 export class AiGatewayConfig {
   readonly gateway: string;
   readonly workersAiGateway?: string;
   readonly accountId: string;
   readonly apiToken: string;
   readonly providers: Set<string>;
+  readonly unifiedCompat: boolean;
+  readonly dynamicRoute?: string;
 
   constructor(env: Cloudflare.Env) {
     this.gateway = env.CF_AI_GATEWAY!;
     // Inference now goes over HTTPS with tokens (pi has no Workers-binding transport), so the
     // account/token pair is required whenever gateway mode is enabled. The token-less
-    // same-account mode existed only because of the Workers binding.
-    if (!env.CF_AI_GATEWAY_ACCOUNT_ID || !env.CF_AI_GATEWAY_API_TOKEN) {
+    // same-account mode existed only because of the Workers binding. AI_GATEWAY_TOKEN is the
+    // musapo/starter alias for CF_AI_GATEWAY_API_TOKEN.
+    const apiToken = gatewayApiToken(env);
+    if (!env.CF_AI_GATEWAY_ACCOUNT_ID || !apiToken) {
       throw new Error(
           "CF_AI_GATEWAY_ACCOUNT_ID and CF_AI_GATEWAY_API_TOKEN (a Run + Read token) are " +
           "required when CF_AI_GATEWAY is set.");
     }
     this.accountId = env.CF_AI_GATEWAY_ACCOUNT_ID;
-    this.apiToken = env.CF_AI_GATEWAY_API_TOKEN;
+    this.apiToken = apiToken;
+    this.unifiedCompat = isUnifiedCompatGateway(env);
+    this.dynamicRoute = env.CF_AI_GATEWAY_DYNAMIC_ROUTE?.trim() || undefined;
     if (env.CF_AI_GATEWAY_WAI_DIRECT === "true" && env.CF_AI_GATEWAY_WAI) {
       throw new Error(
           "CF_AI_GATEWAY_WAI and CF_AI_GATEWAY_WAI_DIRECT cannot be configured together.");
@@ -42,6 +62,9 @@ export class AiGatewayConfig {
    * Get the list of models available through AI Gateway, as AiChatAuthorInfo entries.
    */
   getModelList(): AiChatAuthorInfo[] {
+    if (this.unifiedCompat) {
+      return [{ type: "agent", id: UNIFIED_PINNED_MODEL_ID, name: UNIFIED_PINNED_MODEL_NAME }];
+    }
     let result: AiChatAuthorInfo[] = [];
     for (let [provider, models] of Object.entries(SUGGESTED_MODELS)) {
       if (this.providers.has(provider)) {
@@ -58,6 +81,22 @@ export class AiGatewayConfig {
    * SUGGESTED_MODEL for an enabled gateway provider, or undefined otherwise.
    */
   resolveModel(modelId: string): UserAiModelRecord | undefined {
+    if (this.unifiedCompat) {
+      const aliases = new Set([
+        UNIFIED_PINNED_MODEL_ID,
+        UNIFIED_PINNED_COMPAT_MODEL,
+        ...(this.dynamicRoute ? [`dynamic/${this.dynamicRoute}`] : []),
+      ]);
+      if (!aliases.has(modelId)) return undefined;
+      return {
+        profile: { type: "agent", id: UNIFIED_PINNED_MODEL_ID, name: UNIFIED_PINNED_MODEL_NAME },
+        config: {
+          provider: UNIFIED_PINNED_PROVIDER,
+          model: UNIFIED_PINNED_MODEL_ID,
+          apiToken: "",
+        },
+      };
+    }
     for (let [provider, models] of Object.entries(SUGGESTED_MODELS)) {
       if (this.providers.has(provider) && modelId in models) {
         return {
@@ -80,12 +119,25 @@ export class AiGatewayConfig {
    * Get the AiModelConfig for the quick model (used for title generation).
    */
   getQuickModelConfig(): AiModelConfig | undefined {
+    if (this.unifiedCompat) {
+      return {
+        provider: UNIFIED_PINNED_PROVIDER,
+        model: UNIFIED_PINNED_MODEL_ID,
+        apiToken: "",
+      };
+    }
     // Always use Workers AI here.
     return {
       provider: "cloudflare",
       model: QUICK_MODEL_ID,
       apiToken: "",
     };
+  }
+
+  /** Model id sent on the Unified API /compat endpoint. */
+  compatRequestModel(): string {
+    if (this.dynamicRoute) return `dynamic/${this.dynamicRoute}`;
+    return UNIFIED_PINNED_COMPAT_MODEL;
   }
 }
 

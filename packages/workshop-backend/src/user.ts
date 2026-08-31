@@ -506,6 +506,7 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
     let result: AiChatAuthorInfo[] = [];
 
     // When AI Gateway mode is active, include all suggested models for enabled providers.
+    // Unified Billing pin: only the one platform model, and ignore user-added keys.
     let gwConfig = getAiGatewayConfig(this.env);
     let gwModelIds = new Set<string>();
     if (gwConfig) {
@@ -513,6 +514,7 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
         result.push(entry);
         gwModelIds.add(entry.id);
       }
+      if (gwConfig.unifiedCompat) return result;
     }
 
     // Also include user-configured models, skipping any that duplicate a gateway model.
@@ -526,6 +528,9 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
 
   async addModel(profile: AiChatAuthorInfo, config: AiModelConfig): Promise<void> {
     let gwConfig = getAiGatewayConfig(this.env);
+    if (gwConfig?.unifiedCompat) {
+      throw new Error("Model selection is managed by the platform. Additional models cannot be added.");
+    }
     if (gwConfig && !gwConfig.providers.has(config.provider)) {
       throw new Error(`Provider "${config.provider}" is not available in AI Gateway mode.`);
     }

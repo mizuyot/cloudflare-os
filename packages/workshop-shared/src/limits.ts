@@ -17,6 +17,18 @@ export function insufficientBalanceMessage(minimum: number = MINIMUM_CLOUDFLARE_
   return `Cloudflare AI Gateway balance is below $${minimum}. Please add credits or use BYOK.`;
 }
 
+// Shown by the FC window when platform Unified Billing credits are exhausted. Do not fall back
+// to another inference path (Ollama, Mac1, a second provider outside the gateway route).
+export const FC_INFERENCE_UNAVAILABLE_MESSAGE =
+    "現在応答できません。管理者に連絡してください";
+
+export function isInferenceCreditError(message: string, statusCode?: number): boolean {
+  if (statusCode === 402) return true;
+  const text = message.toLowerCase();
+  if (statusCode === 429 && /credit|quota|billing|balance|payment/.test(text)) return true;
+  return /insufficient (credit|funds|balance)|credit(?:s)? (?:exhausted|depleted)|payment required|out of credits|quota exceeded/.test(text);
+}
+
 // User-facing messages for limit violations.
 export const LIMIT_ERROR_MESSAGES = {
   USAGE_LIMIT_EXCEEDED:

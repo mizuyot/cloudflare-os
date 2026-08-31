@@ -34,6 +34,9 @@ import type { ProductAnalyticsConnectionType, ProductAnalyticsGadgetInput } from
 import { checkUsageAndBalance } from "./ai-gateway-billing/limits/usage-checker";
 import { completeAgentCatalogSnapshot, normalizeAgentCatalog } from "./agent-catalog";
 import { refreshCachedBalance } from "./ai-gateway-billing/cloudflare/connection-service";
+import {
+  FC_INFERENCE_UNAVAILABLE_MESSAGE, isInferenceCreditError,
+} from "@gadgets/workshop-shared/limits";
 import { SharingManager, SharingCaller, CollaboratorRecord, ShareKeyRecord } from "./sharing";
 import { AutoApprovalDrainer } from "./auto-approval";
 import { collectSlashCommands, invokeSlashCommand } from "./slash-commands";
@@ -4028,6 +4031,9 @@ class OverseerImpl implements AgentHooks {
       }
 
       let errorMessage = stringifyError(err);
+      if (isInferenceCreditError(errorMessage, apiError?.statusCode)) {
+        errorMessage = FC_INFERENCE_UNAVAILABLE_MESSAGE;
+      }
       if (apiError) {
         turnLogger.error("runAgent failed", {
           event: "agent.run.failed", statusCode: apiError.statusCode, error: err,

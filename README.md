@@ -131,6 +131,8 @@ While you can code a Gadget by hand if you want, the expectation is that AI writ
 
 You can choose your LLM. Cloudflare OS works with many major AI model providers and self-hosted models, with more providers being added all the time.
 
+Musapo's production instance bills frontier models through Cloudflare AI Gateway Unified Billing (`musapo-os-ai`). Models whose IDs start with `@cf/` are Workers AI: they are not on that credit wallet unless the gateway's Workers AI billing is switched to Unified, which is a separate dashboard setting. This deployment does not use `@cf/` models.
+
 Because of the tightly-integrated and simplified nature of the platform, even when using the same underlying AI models, the Cloudflare OS coding agent often performs better and faster with fewer tokens than a general-purpose coding agent would.
 
 ### Collaborate with AI

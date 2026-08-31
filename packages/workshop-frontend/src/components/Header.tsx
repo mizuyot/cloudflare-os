@@ -13,8 +13,16 @@ export default function Header() {
   const gatekeeperApps = useGatekeeperApps()
   const siteName = useSiteName()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [hideProviders, setHideProviders] = useState(false)
 
   const headerRef = useRef<HTMLElement>(null)
+
+  useEffect(() => {
+    if (!auth?.authenticatedApi) return
+    void auth.authenticatedApi.getAiConfig().then((config) => {
+      setHideProviders(config.enabled === true && config.hideModelPicker === true)
+    }).catch(() => {})
+  }, [auth])
 
   // Click-outside handler to close mobile menu
   useEffect(() => {
@@ -169,6 +177,7 @@ export default function Header() {
                 >
                   Profile
                 </Link>
+                {!hideProviders && (
                 <Link
                   to="/providers"
                   onClick={closeMobileMenu}
@@ -177,6 +186,7 @@ export default function Header() {
                 >
                   Providers
                 </Link>
+                )}
                 {auth.isAdmin && (
                   <Link
                     to="/admin"

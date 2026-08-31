@@ -18,7 +18,10 @@ import { LanguageModelBinding } from "./ai-model-binding";
 import AI_MODEL_BINDING_TYPES from "./ai-model-binding.txt";
 import { AiChatAuthorInfo, AiModelConfig, SUGGESTED_MODELS, WORKERS_AI_OUTPUT_LIMIT }
   from "@gadgets/workshop-shared/api";
-import { AiGatewayConfig, getAiGatewayConfig, type AiGatewayLogRoute } from "./ai-gateway.js";
+import {
+  AiGatewayConfig, UNIFIED_PINNED_MODEL_ID, UNIFIED_PINNED_MODEL_NAME,
+  getAiGatewayConfig, type AiGatewayLogRoute,
+} from "./ai-gateway.js";
 import { completeText } from "./ai-invoke.js";
 import { bridgePdfAttachments } from "./chat-attachment-pdf.js";
 
@@ -440,6 +443,33 @@ function getModelViaGateway(
       `https://gateway.ai.cloudflare.com/v1/${gwConfig.accountId}`;
   const logRoute = (gateway: string): AiGatewayLogRoute =>
       ({ gateway, accountId: gwConfig.accountId, apiToken: gwConfig.apiToken });
+
+  if (gwConfig.unifiedCompat) {
+    // OpenAI-compat Unified API. Dynamic Routes only work on /compat; native provider
+    // paths cannot fail over across vendors. No provider API keys — Unified Billing.
+    const catalog = catalogModel("anthropic", UNIFIED_PINNED_MODEL_ID);
+    const window = modelTokenWindow({
+      provider: "anthropic", model: UNIFIED_PINNED_MODEL_ID, apiToken: "",
+    }, catalog);
+    const model: Model<Api> = {
+      id: gwConfig.compatRequestModel(),
+      name: catalog?.name ?? UNIFIED_PINNED_MODEL_NAME,
+      api: "openai-completions",
+      provider: "cloudflare-ai-gateway",
+      baseUrl: `${gatewayBase}/${gwConfig.gateway}/compat`,
+      reasoning: catalog?.reasoning ?? true,
+      input: catalog?.input ?? ["text", "image"],
+      cost: catalog?.cost ?? ZERO_COST,
+      ...window,
+    };
+    return makeHandle({
+      model,
+      headers: gatewayAuthHeaders,
+      gatewayMetadata: metadata,
+      sessionAffinity: options.sessionAffinity,
+      aiGatewayLogRoute: logRoute(gwConfig.gateway),
+    });
+  }
 
   if (config.provider === "cloudflare" && !gwConfig.workersAiGateway) {
     // CF_AI_GATEWAY_WAI_DIRECT: the plain Workers AI REST endpoint -- no gateway, no log route,

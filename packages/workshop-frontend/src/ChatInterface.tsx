@@ -3315,6 +3315,11 @@ export const ChatInput = ({
 
           {/* Right actions */}
           <div className="ml-auto flex min-w-0 flex-shrink items-center gap-1.5">
+              {models.length === 1 ? (
+                <span className="inline-flex h-8 min-w-0 max-w-[180px] items-center px-2 text-[13px] leading-5 tracking-[-0.25px] text-kumo-subtle">
+                  <span className="min-w-0 truncate">{selectedModelLabel}</span>
+                </span>
+              ) : (
               <DropdownMenu>
                 <DropdownMenu.Trigger
                   render={
@@ -3360,6 +3365,7 @@ export const ChatInput = ({
                   </DropdownMenu.Item>
                 </DropdownMenu.Content>
               </DropdownMenu>
+              )}
               {isAgentActive && onStop ? (
                 <WorkshopIconButton
                   onClick={onStop}

@@ -180,12 +180,39 @@ describe("getModel AI Gateway routing", () => {
 
   it.each([
     { CF_AI_GATEWAY_ACCOUNT_ID: undefined },
-    { CF_AI_GATEWAY_API_TOKEN: undefined },
+    { CF_AI_GATEWAY_API_TOKEN: undefined, AI_GATEWAY_TOKEN: undefined },
   ])("requires gateway credentials whenever gateway mode is enabled", (overrides) => {
     expect(() => getModel(env(overrides), ANTHROPIC_CONFIG, INITIATOR)).toThrow(
         "CF_AI_GATEWAY_ACCOUNT_ID and CF_AI_GATEWAY_API_TOKEN (a Run + Read token) are required " +
         "when CF_AI_GATEWAY is set.");
   });
+
+  it("accepts AI_GATEWAY_TOKEN as an alias for CF_AI_GATEWAY_API_TOKEN", async () => {
+    const handle = getModel(env({
+      CF_AI_GATEWAY_API_TOKEN: undefined,
+      AI_GATEWAY_TOKEN: "alias-token",
+    }), ANTHROPIC_CONFIG, INITIATOR);
+    const request = await captureRequest(handle);
+    expect(request.headers.get("cf-aig-authorization")).toBe("Bearer alias-token");
+  }, 15000);
+
+  it("routes unified billing through the OpenAI-compat endpoint with a pinned model", async () => {
+    const handle = getModel(env({
+      CF_AI_GATEWAY_UNIFIED: "true",
+      CF_AI_GATEWAY_DYNAMIC_ROUTE: "primary",
+    }), ANTHROPIC_CONFIG, INITIATOR);
+
+    expect(handle.model.api).toBe("openai-completions");
+    expect(handle.model.id).toBe("dynamic/primary");
+    expect(handle.model.baseUrl).toBe(
+        "https://gateway.ai.cloudflare.com/v1/gateway-account-id/platform-gateway/compat");
+
+    const request = await captureRequest(handle);
+    expect(request.url).toContain("/compat/chat/completions");
+    expect(request.headers.get("cf-aig-authorization")).toBe("Bearer gateway-token");
+    const body = JSON.parse(request.body);
+    expect(body.model).toBe("dynamic/primary");
+  }, 15000);
 
   it("rejects conflicting Workers AI routing configuration", () => {
     expect(() => getModel(env({
