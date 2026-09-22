@@ -16,6 +16,8 @@ const MAX_EXPORT_DURATION_MS = 30_000;
 const MAX_EXPORT_BYTES = 100 * 1024 * 1024;
 /** Quiet period indicating that the client has finished its initial DOM updates. */
 const DOM_SETTLE_MS = 250;
+/** How long to wait for `documentElement.dataset.exportReady` before printing anyway. */
+const EXPORT_READY_TIMEOUT_MS = 8_000;
 /** Budget for releasing the browser session once an export has settled. */
 const BROWSER_CLOSE_TIMEOUT_MS = 10_000;
 /** Maximum number of pending Worker-to-browser RPC messages. */
@@ -137,6 +139,7 @@ delete globalThis.__workshopExportRuntime;
 `;
   let clientUrl = scriptUrl(clientPrefix + clientCode);
   let runtimeUrl = scriptUrl(
+      `globalThis.gadgetExportFormatId = "pdf";\n` +
       `globalThis.__workshopExportClientUrl = ${JSON.stringify(clientUrl)};\n` +
       BROWSER_EXPORT_RUNTIME);
 
@@ -233,6 +236,24 @@ async function waitForDomSettled(page: Page): Promise<void> {
   }, DOM_SETTLE_MS);
 }
 
+/** Waits for the Gadget to mark the print tree ready, then continues on timeout. */
+async function waitForExportReady(page: Page): Promise<void> {
+  await page.evaluate(async (timeoutMs: number) => {
+    const root = (globalThis as unknown as { document: { documentElement: { dataset: { exportReady?: string } } } })
+      .document.documentElement;
+    if (root.dataset.exportReady === "1") return;
+    await new Promise<void>(resolve => {
+      const started = Date.now();
+      const timer = setInterval(() => {
+        if (root.dataset.exportReady === "1" || Date.now() - started >= timeoutMs) {
+          clearInterval(timer);
+          resolve();
+        }
+      }, 50);
+    });
+  }, EXPORT_READY_TIMEOUT_MS);
+}
+
 /**
  * Renders a Gadget's UI as PDF in a remote browser and streams the bytes back.
  *
@@ -310,6 +331,7 @@ export async function renderGadgetPdf(
       let rpcSession = new RpcSession(transport, gadget);
       sessionCloser = rpcSession.getRemoteMain();
       await waitForDomSettled(page);
+      await waitForExportReady(page);
       await page.emulateMediaType("print");
       await page.evaluate(title => {
         let browser = globalThis as unknown as { document: { title: string } };
