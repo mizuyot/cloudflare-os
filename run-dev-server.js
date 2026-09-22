@@ -49,7 +49,7 @@ const useWorkersAi = process.argv.includes("--use-workers-ai-binding");
 // gitignored, so it will not exist on a clean checkout.
 execFileSync(
   process.execPath,
-  [join(WORKSHOP_BACKEND_DIR, "scripts", "build-format-blueprints.mjs")],
+  [join(WORKSHOP_BACKEND_DIR, "scripts", "build-format-blueprints.ts")],
   { stdio: "inherit", cwd: WORKSHOP_BACKEND_DIR },
 );
 
