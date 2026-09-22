@@ -87,6 +87,22 @@ describe("bundled format blueprints", () => {
     }
   });
 
+  it("marks the export tree ready after the first snapshot is applied", async () => {
+    for (let entry of FORMAT_BLUEPRINTS) {
+      expect(await readBlueprintFile(entry, "client.js"), entry.blueprintId)
+        .toContain("dataset.exportReady = \"1\"");
+    }
+  });
+
+  it("builds the Sheets print workbook before export-ready, like Slides", async () => {
+    let sheets = FORMAT_BLUEPRINTS.find(entry => entry.blueprintId === "format.spreadsheet");
+    expect(sheets).toBeDefined();
+    let client = await readBlueprintFile(sheets!, "client.js");
+    expect(client).toContain("renderPrintWorkbook()");
+    expect(client.lastIndexOf("renderPrintWorkbook()"))
+      .toBeLessThan(client.indexOf("dataset.exportReady = \"1\""));
+  });
+
   it("renders document HTML and PDF exports without the editor chrome", async () => {
     let entry = FORMAT_BLUEPRINTS.find(blueprint => blueprint.blueprintId === "format.document")!;
     let client = await readBlueprintFile(entry, "client.js");

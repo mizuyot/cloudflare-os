@@ -62,6 +62,10 @@ function makeHarness(pdfChunks = ["%PDF-1.4"], closePdf = true) {
       clientInitialized = true;
       return Promise.resolve();
     }
+    if (fn.toString().includes("exportReady")) {
+      expect(clientInitialized).toBe(true);
+      return Promise.resolve();
+    }
     if (fn.toString().includes("document.title")) {
       if (!isolated) throw new Error("Document title was assigned in the main world.");
       expect(clientInitialized).toBe(true);
