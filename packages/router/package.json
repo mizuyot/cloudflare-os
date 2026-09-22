@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "echo \"run 'pnpm dev-server' in the root directory instead\" >&2 && exit 1",
     "deploy": "wrangler deploy",
+    "build:frontend:access": "pnpm --dir ../workshop-frontend exec env VITE_CF_ACCESS_MODE=true pnpm build",
     "build": "tsc",
     "types:check": "tsc --noEmit",
     "clean": "rm -rf dist",
