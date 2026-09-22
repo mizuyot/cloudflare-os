@@ -336,7 +336,7 @@ function sanitizeCellMap(map) {
 }
 
 const CSV_FORMAT_PREFIX = "csv:";
-const MAX_CSV_SHEETS = 31; // The platform allows 32 formats; one is the workbook.
+const MAX_CSV_SHEETS = 30; // The platform allows 32 formats; workbook + PDF take two.
 const MAX_EXPORT_ID_LENGTH = 128;
 const XLSX_FORMAT = {
   id: "xlsx",
@@ -345,6 +345,7 @@ const XLSX_FORMAT = {
   contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   fileExtension: ".xlsx",
 };
+const PDF_FORMAT = { id: "pdf", label: "PDF", mode: "browser", contentType: "application/pdf", fileExtension: ".pdf" };
 
 // Sheet ids are client-chosen, so duplicates and over-long ids are possible in
 // stored structure. Either would fail format validation and disable every export.
@@ -357,7 +358,7 @@ export class ExportHandler extends WorkerEntrypoint {
   async getExportFormats(gadget) {
     const document = await gadget.getDocument();
     const sheetIds = csvSheetIds(document);
-    return [XLSX_FORMAT, ...sheetIds.map((sheetId) => ({
+    return [XLSX_FORMAT, PDF_FORMAT, ...sheetIds.map((sheetId) => ({
       id: CSV_FORMAT_PREFIX + sheetId,
       label: sheetIds.length === 1 ? "CSV" : "CSV (" + document.sheets[sheetId].name + ")",
       mode: "server",

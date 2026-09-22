@@ -112,6 +112,7 @@ describe("bundled format blueprints", () => {
         'id: "xlsx"',
         'label: "Excel Workbook"',
         'contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"',
+        'id: "pdf", label: "PDF", mode: "browser", contentType: "application/pdf"',
         'mode: "server"',
         'contentType: "text/csv"',
       ],

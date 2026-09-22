@@ -16,7 +16,7 @@ A lightweight, persistent spreadsheet Gadget with a familiar grid interface, for
 - Range sorting, AutoSum, copy/paste via TSV, and local undo/redo for cell edits
 - Automatic persistent saving with optimistic per-cell conflict detection
 - Real-time operation and presence synchronization in the server architecture
-- Excel workbook and per-sheet CSV export
+- Excel workbook, PDF, and per-sheet CSV export
 
 ## Using the spreadsheet
 
@@ -179,7 +179,7 @@ Exports the Durable Object class `Gadget`, which is the authoritative persistenc
 - Uses last-writer-wins semantics for document structure
 - Broadcasts operations and presence events to subscribed clients after the queue releases, best-effort and without awaiting them, so a callback may itself read or write the document and a hung subscriber holds up only its own client
 - Sanitizes titles, dimensions, cell contents, references, and formatting
-- Advertises and produces the server-side workbook and CSV exports
+- Advertises and produces the server-side workbook and CSV exports, and the existing browser-mode PDF export
 
 ### `xlsx.js` and `zip.js`
 
@@ -210,8 +210,8 @@ The server and client synchronization code support multiple connected clients an
 
 ## CSV export
 
-Up to 31 worksheets are exposed as individual **CSV** export options, leaving one of the platform's
-32 format slots for XLSX. CSV files contain the stored cell values through the worksheet's used
+Up to 30 worksheets are exposed as individual **CSV** export options, leaving two of the platform's
+32 format slots for XLSX and PDF. CSV files contain the stored cell values through the worksheet's used
 range. Formula cells are exported as their raw formulas (for example, `=SUM(A1:A10)`), not as
 browser-computed display values. Fields use standard CSV quoting and CRLF line endings.
 
@@ -243,3 +243,9 @@ References resolve to the first worksheet with a matching source name, as in the
 
 Filters, charts, comments and pivot tables are not exported; cells already materialized from them
 export as ordinary values.
+
+## PDF export
+
+**PDF** uses the same browser-mode path as documents and slides (`id: "pdf"`, `mode: "browser"`).
+The grid hides editor chrome and prints each worksheet as a page. The server export handler does
+not produce PDF bytes.
