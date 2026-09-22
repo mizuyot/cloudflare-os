@@ -83,6 +83,22 @@ describe("bundled format blueprints", () => {
     }
   });
 
+  it("marks the export tree ready after the first snapshot is applied", async () => {
+    for (let entry of FORMAT_BLUEPRINTS) {
+      expect(await readClientCode(entry), entry.blueprintId)
+        .toContain("dataset.exportReady = \"1\"");
+    }
+  });
+
+  it("builds the Sheets print workbook before export-ready, like Slides", async () => {
+    let sheets = FORMAT_BLUEPRINTS.find(entry => entry.blueprintId === "format.spreadsheet");
+    expect(sheets).toBeDefined();
+    let client = await readClientCode(sheets!);
+    expect(client).toContain("renderPrintWorkbook()");
+    expect(client.indexOf("renderPrintWorkbook()"))
+      .toBeLessThan(client.indexOf("dataset.exportReady = \"1\""));
+  });
+
   // Skipped when the deployment bundles nothing, which FORMAT_BLUEPRINTS_DIR makes a supported
   // configuration rather than a broken checkout.
   it.skipIf(FORMAT_BLUEPRINTS.length === 0)(

@@ -10,7 +10,7 @@
     "build": "node build-browser-runtime.mjs && node scripts/build-format-blueprints.mjs && tsc",
     "types:check": "node build-browser-runtime.mjs && node scripts/build-format-blueprints.mjs && tsc --noEmit",
     "clean": "rm -rf dist",
-    "test": "node build-browser-runtime.mjs && node scripts/build-format-blueprints.mjs && vitest run && vitest run --config vitest.integration.config.ts",
+    "test": "node build-browser-runtime.mjs && node scripts/build-format-blueprints.mjs && vitest run && vitest run --config vitest.integration.config.ts && node scripts/verify-format-pdfs.mjs",
     "test:integration": "node build-browser-runtime.mjs && node scripts/build-format-blueprints.mjs && vitest run --config vitest.integration.config.ts",
     "test:watch": "node build-browser-runtime.mjs && node scripts/build-format-blueprints.mjs && vitest",
     "build:format-blueprints": "node scripts/build-format-blueprints.mjs",
@@ -33,6 +33,7 @@
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.18.8",
     "esbuild": "^0.28.1",
+    "puppeteer-core": "^25.11.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10",
     "wrangler": "^4.119.0"

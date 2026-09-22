@@ -34,6 +34,10 @@ function makeHarness(pdfChunks = ["%PDF-1.4"], closePdf = true) {
         renderSettled = fn.toString().includes("MutationObserver");
         return Promise.resolve();
       }
+      if (fn.toString().includes("exportReady")) {
+        expect(clientInitialized).toBe(true);
+        return Promise.resolve();
+      }
       if (fn.toString().includes("document.title")) {
         documentTitle = typeof args[0] === "string" ? args[0] : undefined;
         return Promise.resolve();
