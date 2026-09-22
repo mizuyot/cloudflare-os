@@ -1776,3 +1776,4 @@ if (isDocumentExport) {
     setStatus("bad", "Offline");
   }
   refreshToolbarState();
+  document.documentElement.dataset.exportReady = "1";

@@ -2555,6 +2555,7 @@ class SheetCallbacks extends RpcTarget {
   try {
     const doc = await gadget.subscribe(new SheetCallbacks(), { clientId, name: collaboratorName, color: collaboratorColor });
     applySnapshot(doc);
+    renderPrintWorkbook();
     setStatus("saved", "Saved");
     updateUndoButtons();
     sendPresence();
@@ -2563,4 +2564,5 @@ class SheetCallbacks extends RpcTarget {
     console.error(e);
     setStatus("bad", "Offline");
   }
+  document.documentElement.dataset.exportReady = "1";
 

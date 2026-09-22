@@ -4012,4 +4012,5 @@ class Subscriber extends RpcTarget {
     canUndo = !!s?.canUndo; canRedo = !!s?.canRedo;
     updateUndoButtons();
   } catch {}
+  document.documentElement.dataset.exportReady = "1";
 
