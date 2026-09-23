@@ -310,11 +310,10 @@ describe("limitStream", () => {
 });
 
 describe("pdf export snapshot", () => {
-  it("maps bundled output ids to the native read method", () => {
-    expect(pdfExportSnapshotKind("spreadsheet")).toBe("document");
-    expect(pdfExportSnapshotKind("document")).toBe("document");
-    expect(pdfExportSnapshotKind("presentation")).toBe("deck");
-    expect(pdfExportSnapshotKind("custom")).toBeUndefined();
+  it("reads the snapshot kind a format declared, and skips undeclared formats", () => {
+    expect(pdfExportSnapshotKind({ pdfSnapshot: "document" })).toBe("document");
+    expect(pdfExportSnapshotKind({ pdfSnapshot: "deck" })).toBe("deck");
+    expect(pdfExportSnapshotKind({})).toBeUndefined();
     expect(pdfExportSnapshotKind(undefined)).toBeUndefined();
   });
 
@@ -375,9 +374,32 @@ describe("renderGadgetInBrowser", () => {
         contentType: "application/pdf",
         fileExtension: ".pdf",
       },
+      { title: "見積書" },
     )).rejects.toThrow("The Gadget was not ready to export.");
     expect(harness.pdfRequested()).toBe(false);
     expect(harness.browserClosed()).toBe(true);
+  });
+
+  it("skips the ready wait when no snapshot is inlined", async () => {
+    let { gadget, harness } = makeHarness();
+    harness.setExportReady({ ready: false, waitedMs: 8000 });
+
+    expect(await collect(await renderGadgetInBrowser(
+      {} as BrowserRun,
+      "export default {}",
+      "Test Gadget",
+      gadget as never,
+      {
+        id: "pdf",
+        label: "PDF",
+        mode: "browser",
+        contentType: "application/pdf",
+        fileExtension: ".pdf",
+      },
+    ))).toBe("%PDF-1.4");
+    expect(harness.pdfRequested()).toBe(true);
+    expect(decodeURIComponent(decodeURIComponent(harness.exportDocument())))
+      .not.toContain("__workshopExportSnapshot");
   });
 
   it("waits for the client module, streams a PDF, and releases the browser", async () => {

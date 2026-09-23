@@ -133,10 +133,12 @@ describe("bundled format blueprints", () => {
         'id: "markdown", label: "Markdown", mode: "server", contentType: "text/markdown"',
         'id: "html", label: "HTML", mode: "browser", contentType: "text/html"',
         'id: "pdf", label: "PDF", mode: "browser", contentType: "application/pdf"',
+        'pdfSnapshot: "document"',
       ],
       "format.slides": [
         'id: "html", label: "HTML", mode: "browser", contentType: "text/html"',
         'id: "pdf", label: "PDF", mode: "browser", contentType: "application/pdf"',
+        'pdfSnapshot: "deck"',
       ],
       "format.spreadsheet": [
         'const CSV_FORMAT_PREFIX = "csv:"',
@@ -144,6 +146,7 @@ describe("bundled format blueprints", () => {
         'label: "Excel Workbook"',
         'contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"',
         'id: "pdf", label: "PDF", mode: "browser", contentType: "application/pdf"',
+        'pdfSnapshot: "document"',
         'mode: "server"',
         'contentType: "text/csv"',
       ],
