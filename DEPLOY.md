@@ -12,7 +12,8 @@ Wrangler の認証プロファイル: `musapo`
 
 | 名前 | 役割 |
 |---|---|
-| `feat/pdf-export-inline` | **本番 musapo-os の正本。** 新しい作業はここから切る |
+| `feat/xlsx-font` | **本番 musapo-os の正本。** 新しい作業はここから切る |
+| `feat/pdf-export-inline` | 一つ前の正本（PDF インライン取り込みまで）。比較用 |
 | `add-latest-llm-models` | 取り込み前の基準点。比較用に残してある。ここから作業を始めない |
 | `main` | 本番と歴史が分かれている（衝突 35 件）。**統合しない。ここから作業を始めない** |
 | `backup/main-old-20260923` | 古い `main` の退避。触らない |
@@ -21,8 +22,8 @@ Wrangler の認証プロファイル: `musapo`
 - **origin（cloudflare/cloudflare-os）には push しない**
 
 ```bash
-git checkout feat/pdf-export-inline
-git pull mine feat/pdf-export-inline
+git checkout feat/xlsx-font
+git pull mine feat/xlsx-font
 git checkout -b feat/your-work
 # 作業後
 git push -u mine HEAD
@@ -144,21 +145,21 @@ npx wrangler rollback 前の版ID \
 
 | | 今の本番 | 一つ前（戻す先） |
 |---|---|---|
-| 裏側 `musapo-os-backend` | `2767b72c-884d-4b3d-902a-14bf75045603`（Inline PDF snapshot） | `b9839b09-a654-4059-b2c1-7f6ab6f8ae10`（PDF stage timing logs） |
-| 玄関 `musapo-os` | `7e25fb86-15bb-40fc-9efc-6e3c45a803cc`（Access-mode frontend + inline PDF snapshot） | `471671a7-4980-41a6-b562-becb6a5cc616`（Access-mode frontend + getDocument PDF export） |
+| 裏側 `musapo-os-backend` | `42cddee1-8c31-4476-a01b-10f3d9d7a0d7`（xlsx named fonts） | `2767b72c-884d-4b3d-902a-14bf75045603`（Inline PDF snapshot） |
+| 玄関 `musapo-os` | `263a3cdc-cae7-463b-8fbf-9553542dbc0c`（Access-mode frontend + xlsx named fonts） | `7e25fb86-15bb-40fc-9efc-6e3c45a803cc`（Access-mode frontend + inline PDF snapshot） |
 
 一つ前へ戻す例:
 
 ```bash
 cd packages/workshop-backend
-npx wrangler rollback b9839b09-a654-4059-b2c1-7f6ab6f8ae10 \
+npx wrangler rollback 2767b72c-884d-4b3d-902a-14bf75045603 \
   --name musapo-os-backend --config wrangler.prod.jsonc --profile musapo \
-  --message "Rollback backend to pre-inline PDF"
+  --message "Rollback backend to inline PDF snapshot"
 
 cd packages/router
-npx wrangler rollback 471671a7-4980-41a6-b562-becb6a5cc616 \
+npx wrangler rollback 7e25fb86-15bb-40fc-9efc-6e3c45a803cc \
   --name musapo-os --config wrangler.prod.jsonc --profile musapo \
-  --message "Rollback router to pre-inline PDF"
+  --message "Rollback router to inline PDF snapshot"
 ```
 
 ---
@@ -166,7 +167,7 @@ npx wrangler rollback 471671a7-4980-41a6-b562-becb6a5cc616 \
 ## 4. 既知の制限
 
 - **2026-09-23 より前に作られた表・文書・スライドは PDF が出ない。** 作られた時点の `client.js` を保持するため。PDF が必要なら新規作成する。Excel / CSV は古い表でも出る。
-- **xlsx のフォントは Calibri 固定。** 色分け（青＝入力 / 黒＝数式 / 緑＝シート間参照）は反映される。
+- **xlsx のフォント名は `fmt.fn` で指定できる。** 未指定は Calibri 13.5pt（画面のピクセル換算）。`fn` があるとき `fs` はポイントなので、Arial 10 は 10.0pt になる。色分け（青＝入力 / 黒＝数式 / 緑＝シート間参照）も反映される。
 - **AI Gateway の 429（Wholesale Rate limited）** が出ることがある。書き出し機能とは無関係。
 
 ---
