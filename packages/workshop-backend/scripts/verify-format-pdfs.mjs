@@ -50,14 +50,18 @@ const payloads = {
   },
 };
 
-function prelude(kind) {
+function prelude(kind, { omitSnapshot = false } = {}) {
   return `
 class RpcTarget {}
 const __payload = ${JSON.stringify(payloads[kind])};
+if (!${omitSnapshot ? "true" : "false"}) {
+  globalThis.__workshopExportSnapshot = __payload;
+}
 const gadget = new Proxy({}, {
   get(_t, prop) {
-    if (prop === "subscribe") return async () => __payload;
-    if (prop === "getDeck") return async () => __payload;
+    if (prop === "subscribe" || prop === "getDocument" || prop === "getDeck") {
+      return async () => { throw new Error(String(prop) + " must not run during PDF export"); };
+    }
     if (prop === "getUndoState") return async () => ({ canUndo: false, canRedo: false });
     return async () => {};
   }
@@ -123,6 +127,30 @@ ${clientFromUnpacked(gadget)}
       }
       console.log(`ok ${kind}`, pdfPath, "chars", text.length);
     }
+
+    const failPage = await browser.newPage();
+    const failHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>
+<script type="module">
+globalThis.gadgetExportFormatId = "pdf";
+${prelude("sheets", { omitSnapshot: true })}
+${clientFromUnpacked("workspace-sheets")}
+</script></body></html>`;
+    await failPage.setContent(failHtml, { waitUntil: "load" });
+    let becameReady = false;
+    try {
+      await failPage.waitForFunction(
+        () => document.documentElement.dataset.exportReady === "1",
+        { timeout: 1500 },
+      );
+      becameReady = true;
+    } catch {
+      becameReady = false;
+    }
+    await failPage.close();
+    if (becameReady) {
+      throw new Error("missing snapshot still marked the export ready");
+    }
+    console.log("ok sheets-missing-snapshot");
   } finally {
     await browser.close();
   }

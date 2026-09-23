@@ -48,7 +48,11 @@ import {
   isAllowedChatAttachmentImageMimeType,
   validateChatAttachmentUpload,
 } from "./chat-attachment-validation";
-import { renderGadgetInBrowser } from "./browser-export";
+import {
+  pdfExportSnapshotKind,
+  readPdfExportSnapshot,
+  renderGadgetInBrowser,
+} from "./browser-export";
 import {
   defaultExportFormats,
   exportServerFormat,
@@ -2490,7 +2494,17 @@ class OverseerImpl implements AgentHooks {
       let bundle = this.getGadgetUiBundle(gadgetId, chatId);
       if (!bundle) throw new Error("This Gadget does not have a UI to export.");
       let title = this.getGadgetRecord(gadgetId).title;
-      return renderGadgetInBrowser(browser, bundle.jsCode, title, exportGadget.move(), format);
+      // Read the document on this Worker before opening Browser Rendering. The export page
+      // cannot call getDocument / getDeck / subscribe on the native stub (Cap'n Web `.move()`).
+      let snapshot = format.contentType === "application/pdf"
+        ? await readPdfExportSnapshot(
+            exportGadget,
+            pdfExportSnapshotKind(this.getGadgetRecord(gadgetId).output?.id),
+          )
+        : undefined;
+      return renderGadgetInBrowser(
+        browser, bundle.jsCode, title, exportGadget.move(), format, snapshot,
+      );
     }
   }
 

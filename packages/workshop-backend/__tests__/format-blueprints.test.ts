@@ -94,6 +94,21 @@ describe("bundled format blueprints", () => {
     }
   });
 
+  it("loads Sheets, Docs, and Slides PDF export from an inlined snapshot", async () => {
+    for (let blueprintId of [
+      "format.spreadsheet", "format.document", "format.slides",
+    ] as const) {
+      let entry = FORMAT_BLUEPRINTS.find(blueprint => blueprint.blueprintId === blueprintId);
+      expect(entry, blueprintId).toBeDefined();
+      let client = await readBlueprintFile(entry!, "client.js");
+      expect(client, blueprintId).toContain("gadgetExportFormatId === \"pdf\"");
+      expect(client, blueprintId).toContain("__workshopExportSnapshot");
+      expect(client, blueprintId).toContain("pdf export snapshot is missing");
+      expect(client.indexOf("__workshopExportSnapshot"), blueprintId)
+        .toBeLessThan(client.indexOf("dataset.exportReady = \"1\""));
+    }
+  });
+
   it("builds the Sheets print workbook before export-ready, like Slides", async () => {
     let sheets = FORMAT_BLUEPRINTS.find(entry => entry.blueprintId === "format.spreadsheet");
     expect(sheets).toBeDefined();

@@ -17,11 +17,69 @@ import { createExportDeadline, limitExportStream, MAX_EXPORT_BYTES } from "./exp
 type BrowserExportLogFields = {
   event?: string;
   error?: unknown;
+  ready?: boolean;
+  timedOut?: boolean;
+  waitedMs?: number;
+  elapsedMs?: number;
+  stage?: string;
+  cancelKind?: string;
+  errorName?: string;
+  snapshotBytes?: number;
 };
 
 const logger = createLogger<BrowserExportLogFields>({ component: "workshop.browser-export" });
 
-/** How long to wait for `documentElement.dataset.exportReady` before printing anyway. */
+/** Which Gadget method holds the print snapshot for a bundled output format. */
+export type PdfExportSnapshotKind = "document" | "deck";
+
+/**
+ * Maps a gadget's output id to the native method that returns its print snapshot.
+ * Unknown outputs (scratch gadgets) have no snapshot to inline.
+ */
+export function pdfExportSnapshotKind(outputId: string | undefined): PdfExportSnapshotKind | undefined {
+  if (outputId === "spreadsheet" || outputId === "document") return "document";
+  if (outputId === "presentation") return "deck";
+  return undefined;
+}
+
+/**
+ * Reads the print snapshot over Worker-to-Gadget native RPC, before Browser Rendering starts.
+ * Must not be called from the export page: that path cannot `.move()` the result.
+ */
+export async function readPdfExportSnapshot(
+  gadget: { getDocument?: () => Promise<unknown>; getDeck?: () => Promise<unknown> },
+  kind: PdfExportSnapshotKind | undefined,
+): Promise<unknown | undefined> {
+  if (kind === "document" && typeof gadget.getDocument === "function") {
+    return await gadget.getDocument();
+  }
+  if (kind === "deck" && typeof gadget.getDeck === "function") {
+    return await gadget.getDeck();
+  }
+  return undefined;
+}
+
+/** Bounded class for an export failure. Omits Gadget-authored exception text. */
+function classifyExportCancel(error: unknown, deadlineError: Error): string {
+  if (error === deadlineError) return "export-deadline";
+  if (!(error instanceof Error)) return "unknown";
+  const message = error.message;
+  if (message.includes("hung and would never generate a response")) return "worker-hung";
+  if (message.includes("canceled this request")) return "worker-canceled";
+  if (message === "The Gadget was not ready to export.") return "ready-timeout";
+  if (message === "Browser export timed out.") return "export-deadline";
+  if (message === "Browser page closed.") return "browser-page-closed";
+  if (message.includes("Too many subrequests") || message.includes("subrequest limit")) {
+    return "subrequest-limit";
+  }
+  if (error.name === "TimeoutError") return "timeout";
+  if (message.includes("Unable to create") && message.toLowerCase().includes("browser")) {
+    return "browser-session";
+  }
+  return "other";
+}
+
+/** How long to wait for `documentElement.dataset.exportReady` before failing the export. */
 const EXPORT_READY_TIMEOUT_MS = 8_000;
 /** Budget for releasing the browser session once an export has settled. */
 const BROWSER_CLOSE_TIMEOUT_MS = 10_000;
@@ -123,18 +181,20 @@ export class BrowserRpcTransport implements RpcTransport {
   }
 }
 
-/** Waits for the Gadget to mark the print tree ready, then continues on timeout. */
-async function waitForExportReady(page: Page): Promise<void> {
-  await page.evaluate(async (timeoutMs: number) => {
+/** Waits for the Gadget to mark the print tree ready, then fails the export on timeout. */
+async function waitForExportReady(page: Page): Promise<{ ready: boolean; waitedMs: number }> {
+  return await page.evaluate(async (timeoutMs: number) => {
     const root = (globalThis as unknown as { document: { documentElement: { dataset: { exportReady?: string } } } })
       .document.documentElement;
-    if (root.dataset.exportReady === "1") return;
-    await new Promise<void>(resolve => {
-      const started = Date.now();
+    const started = Date.now();
+    if (root.dataset.exportReady === "1") return { ready: true, waitedMs: 0 };
+    return await new Promise<{ ready: boolean; waitedMs: number }>(resolve => {
       const timer = setInterval(() => {
-        if (root.dataset.exportReady === "1" || Date.now() - started >= timeoutMs) {
+        const ready = root.dataset.exportReady === "1";
+        const waitedMs = Date.now() - started;
+        if (ready || waitedMs >= timeoutMs) {
           clearInterval(timer);
-          resolve();
+          resolve({ ready, waitedMs });
         }
       }, 50);
     });
@@ -145,8 +205,11 @@ function scriptUrl(source: string): string {
   return `data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`;
 }
 
-function makeExportHtml(clientCode: string, formatId: string): string {
-  let clientPrefix = String.raw`//# sourceURL=client.js
+function makeExportHtml(clientCode: string, formatId: string, snapshot?: unknown): string {
+  let snapshotPrelude = snapshot === undefined
+    ? ""
+    : `globalThis.__workshopExportSnapshot = ${JSON.stringify(snapshot)};\n`;
+  let clientPrefix = snapshotPrelude + String.raw`//# sourceURL=client.js
 const { gadget, RpcStub, RpcTarget } = globalThis.__workshopExportRuntime;
 delete globalThis.__workshopExportRuntime;
 `;
@@ -180,13 +243,34 @@ export async function renderGadgetInBrowser(
   documentTitle: string,
   gadget: RpcStub<any>,
   format: GadgetExportFormat,
+  snapshot?: unknown,
 ): Promise<ReadableStream<Uint8Array>> {
   const deadline = createExportDeadline("Browser export timed out.");
+  const startedAt = Date.now();
+  const elapsedMs = () => Date.now() - startedAt;
+  let stage = "start";
+  const mark = (next: string) => {
+    stage = next;
+    logger.info("gadget export stage", {
+      event: `gadget.export.stage.${next}`,
+      elapsedMs: elapsedMs(),
+      stage: next,
+    });
+  };
 
+  if (snapshot !== undefined) {
+    logger.info("gadget export snapshot inlined", {
+      event: "gadget.export.snapshot.inlined",
+      snapshotBytes: new TextEncoder().encode(JSON.stringify(snapshot)).byteLength,
+    });
+  }
+
+  mark("launch.start");
   let launchPromise = launch(browserBinding);
   let browser: Awaited<ReturnType<typeof launch>>;
   try {
     browser = await deadline.race(launchPromise);
+    mark("launch.done");
   } catch (error) {
     deadline.clear();
     gadget[Symbol.dispose]();
@@ -195,6 +279,10 @@ export async function renderGadgetInBrowser(
     logger.warn("failed to launch browser for gadget export", {
       event: "gadget.export.browser.launch.failed",
       error,
+      elapsedMs: elapsedMs(),
+      stage,
+      cancelKind: classifyExportCancel(error, deadline.error),
+      errorName: error instanceof Error ? error.name : typeof error,
     });
     throw error;
   }
@@ -232,7 +320,7 @@ export async function renderGadgetInBrowser(
               status: 200,
               contentType: "text/html",
               headers: {"Content-Security-Policy": EXPORT_DOCUMENT_CSP},
-              body: makeExportHtml(clientCode, format.id),
+              body: makeExportHtml(clientCode, format.id, snapshot),
             });
           } else {
             void request.abort();
@@ -244,22 +332,39 @@ export async function renderGadgetInBrowser(
         }
       });
       await page.goto(EXPORT_DOCUMENT_URL, { waitUntil: "load" });
+      mark("goto.done");
       let transport = new BrowserRpcTransport(page);
       page.on("close", () => transport.abort(new Error("Browser page closed.")));
       let rpcSession = new RpcSession(transport, gadget);
       sessionCloser = rpcSession.getRemoteMain();
+      mark("client.wait.start");
       await page.evaluate(waitForClientModule);
-      await waitForExportReady(page);
+      mark("client.wait.done");
+      const wait = await waitForExportReady(page);
+      if (!wait.ready) {
+        logger.warn("gadget export ready wait failed", {
+          event: "gadget.export.ready.wait.failed",
+          ready: false,
+          timedOut: true,
+          waitedMs: wait.waitedMs,
+          elapsedMs: elapsedMs(),
+        });
+        throw new Error("The Gadget was not ready to export.");
+      }
       const frame = page.mainFrame() as FrameWithIsolatedRealm;
       const isolatedRealm = frame.isolatedRealm();
       await isolatedRealm.evaluate(setDocumentTitle, documentTitle);
       switch (format.contentType) {
-        case "application/pdf":
-          return page.createPDFStream({
+        case "application/pdf": {
+          mark("pdf.start");
+          const pdf = await page.createPDFStream({
             preferCSSPageSize: true,
             printBackground: true,
             waitForFonts: true,
           });
+          mark("pdf.done");
+          return pdf;
+        }
         case "text/html": {
           await isolatedRealm.evaluate(HTML_SANITIZER_RUNTIME);
           const html = await isolatedRealm.evaluate(
@@ -299,7 +404,13 @@ export async function renderGadgetInBrowser(
   } catch (error) {
     // Deliberately omits the caught value: failures here can carry Gadget-authored exception text,
     // which must not reach logs or the external issue Reporter.
-    logger.warn("failed to render gadget export", { event: "gadget.export.render.failed" });
+    logger.warn("failed to render gadget export", {
+      event: "gadget.export.render.failed",
+      elapsedMs: elapsedMs(),
+      stage,
+      cancelKind: classifyExportCancel(error, deadline.error),
+      errorName: error instanceof Error ? error.name : typeof error,
+    });
     if (error === deadline.error) {
       void release();
     } else {
