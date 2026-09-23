@@ -147,8 +147,13 @@ function inMemoryGadget(subscribers: Map<unknown, unknown> = new Map()) {
   }) as Gadget;
 }
 
-function setCell(ref: string, value: string, baseVersion = 0) {
-  return {senderId: "test", cellOps: [{sheetId: "sheet", ref, value, fmt: null, baseVersion}]};
+function setCell(
+  ref: string,
+  value: string,
+  baseVersion = 0,
+  fmt: Record<string, unknown> | null = null,
+) {
+  return {senderId: "test", cellOps: [{sheetId: "sheet", ref, value, fmt, baseVersion}]};
 }
 
 describe("streaming ZIP32", () => {
@@ -553,6 +558,25 @@ describe("Workspace Sheets XLSX", () => {
     expect(cellXml(worksheet, "C2")).toMatch(/^<c r="C2" s="\d+"\/>$/);
   });
 
+  it("writes a named font as points and keeps Calibri when the name is omitted", async () => {
+    const {entries} = await readZip(workbookToXlsx({
+      sheetOrder: ["fonts"],
+      sheets: {fonts: sheet("Fonts", {rows: 2, cols: 3})},
+      cells: {fonts: {
+        A1: cell("named", {fn: "Arial", fs: 10, c: "#0000ff"}),
+        B1: cell("unnamed", {fs: 18}),
+        C1: cell("plain", null),
+      }},
+    }));
+    const styles = text(entries, "xl/styles.xml");
+    expect(styles).toContain('<name val="Arial"/>');
+    expect(styles).toContain('<sz val="10"/>');
+    expect(styles).toContain('<name val="Calibri"/><family val="2"/><scheme val="minor"/>');
+    expect(styles).toContain('<sz val="13.5"/>');
+    expect(styles.match(/<name val="Arial"\/>/g)).toHaveLength(1);
+    expect(styles).toContain('rgb="FF0000FF"');
+  });
+
   it("writes row-only, column-only, and combined frozen panes", async () => {
     const {entries} = await readZip(workbookToXlsx({
       sheetOrder: ["rows", "columns", "both"],
@@ -784,5 +808,15 @@ describe("Workspace Sheets export formats", () => {
     gadget.getDocument.mockImplementation(async () => { throw new Error("borrowed capability reused"); });
     const {entries} = await readZip(xlsx);
     expect(cellXml(text(entries, "xl/worksheets/sheet1.xml"), "B2")).toContain("<f>SUM(A1:A2)</f>");
+  });
+
+  it("keeps a font name on applyOperation so agents can set Arial 10pt", async () => {
+    const fixture = inMemoryGadget();
+    const result = await fixture.applyOperation(setCell("A1", "2000", 0, {
+      fn: "Arial", fs: 10, c: "#0000ff",
+    }));
+    expect(result.status).toBe("applied");
+    const document = await fixture.getDocument();
+    expect(document.cells.sheet.A1.fmt).toEqual({fn: "Arial", fs: 10, c: "#0000ff"});
   });
 });
