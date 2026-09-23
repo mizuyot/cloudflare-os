@@ -2552,17 +2552,28 @@ class SheetCallbacks extends RpcTarget {
 // Init
 // ===========================================================================
 
-  try {
-    const doc = await gadget.subscribe(new SheetCallbacks(), { clientId, name: collaboratorName, color: collaboratorColor });
-    applySnapshot(doc);
-    renderPrintWorkbook();
-    setStatus("saved", "Saved");
-    updateUndoButtons();
-    sendPresence();
-    gridScroll.focus();
-  } catch (e) {
-    console.error(e);
-    setStatus("bad", "Offline");
+  if (globalThis.gadgetExportFormatId === "pdf") {
+    try {
+      const doc = await gadget.getDocument();
+      applySnapshot(doc);
+      renderPrintWorkbook();
+    } catch (e) {
+      console.error("pdf export failed to load spreadsheet", e && e.message || e);
+      throw e;
+    }
+  } else {
+    try {
+      const doc = await gadget.subscribe(new SheetCallbacks(), { clientId, name: collaboratorName, color: collaboratorColor });
+      applySnapshot(doc);
+      renderPrintWorkbook();
+      setStatus("saved", "Saved");
+      updateUndoButtons();
+      sendPresence();
+      gridScroll.focus();
+    } catch (e) {
+      console.error(e);
+      setStatus("bad", "Offline");
+    }
   }
   document.documentElement.dataset.exportReady = "1";
 

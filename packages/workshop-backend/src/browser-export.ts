@@ -17,11 +17,14 @@ import { createExportDeadline, limitExportStream, MAX_EXPORT_BYTES } from "./exp
 type BrowserExportLogFields = {
   event?: string;
   error?: unknown;
+  ready?: boolean;
+  timedOut?: boolean;
+  waitedMs?: number;
 };
 
 const logger = createLogger<BrowserExportLogFields>({ component: "workshop.browser-export" });
 
-/** How long to wait for `documentElement.dataset.exportReady` before printing anyway. */
+/** How long to wait for `documentElement.dataset.exportReady` before failing the export. */
 const EXPORT_READY_TIMEOUT_MS = 8_000;
 /** Budget for releasing the browser session once an export has settled. */
 const BROWSER_CLOSE_TIMEOUT_MS = 10_000;
@@ -123,18 +126,20 @@ export class BrowserRpcTransport implements RpcTransport {
   }
 }
 
-/** Waits for the Gadget to mark the print tree ready, then continues on timeout. */
-async function waitForExportReady(page: Page): Promise<void> {
-  await page.evaluate(async (timeoutMs: number) => {
+/** Waits for the Gadget to mark the print tree ready, then fails the export on timeout. */
+async function waitForExportReady(page: Page): Promise<{ ready: boolean; waitedMs: number }> {
+  return await page.evaluate(async (timeoutMs: number) => {
     const root = (globalThis as unknown as { document: { documentElement: { dataset: { exportReady?: string } } } })
       .document.documentElement;
-    if (root.dataset.exportReady === "1") return;
-    await new Promise<void>(resolve => {
-      const started = Date.now();
+    const started = Date.now();
+    if (root.dataset.exportReady === "1") return { ready: true, waitedMs: 0 };
+    return await new Promise<{ ready: boolean; waitedMs: number }>(resolve => {
       const timer = setInterval(() => {
-        if (root.dataset.exportReady === "1" || Date.now() - started >= timeoutMs) {
+        const ready = root.dataset.exportReady === "1";
+        const waitedMs = Date.now() - started;
+        if (ready || waitedMs >= timeoutMs) {
           clearInterval(timer);
-          resolve();
+          resolve({ ready, waitedMs });
         }
       }, 50);
     });
@@ -249,7 +254,23 @@ export async function renderGadgetInBrowser(
       let rpcSession = new RpcSession(transport, gadget);
       sessionCloser = rpcSession.getRemoteMain();
       await page.evaluate(waitForClientModule);
-      await waitForExportReady(page);
+      logger.info("gadget export ready wait started", { event: "gadget.export.ready.wait.start" });
+      const wait = await waitForExportReady(page);
+      if (!wait.ready) {
+        logger.warn("gadget export ready wait failed", {
+          event: "gadget.export.ready.wait.failed",
+          ready: false,
+          timedOut: true,
+          waitedMs: wait.waitedMs,
+        });
+        throw new Error("The Gadget was not ready to export.");
+      }
+      logger.info("gadget export ready wait finished", {
+        event: "gadget.export.ready.wait.ready",
+        ready: true,
+        timedOut: false,
+        waitedMs: wait.waitedMs,
+      });
       const frame = page.mainFrame() as FrameWithIsolatedRealm;
       const isolatedRealm = frame.isolatedRealm();
       await isolatedRealm.evaluate(setDocumentTitle, documentTitle);

@@ -25,6 +25,7 @@ type Harness = {
   screenshotCaptureBeyondViewport: () => boolean | undefined;
   setDocumentDimensions: (width: number, height: number) => void;
   setSnapshot: (value: string) => void;
+  setExportReady: (value: { ready: boolean; waitedMs: number }) => void;
 };
 
 function makeHarness(pdfChunks = ["%PDF-1.4"], closePdf = true) {
@@ -47,6 +48,7 @@ function makeHarness(pdfChunks = ["%PDF-1.4"], closePdf = true) {
   let snapshot = "<!DOCTYPE html>\n<html><head></head><body>Snapshot</body></html>";
   let navigated = false;
   let requestHandler: ((request: unknown) => void) | undefined;
+  let exportReadyResult: { ready: boolean; waitedMs: number } = { ready: true, waitedMs: 0 };
   const evaluate = (
     isolated: boolean,
     fn: ((...args: never[]) => unknown) | string,
@@ -64,7 +66,7 @@ function makeHarness(pdfChunks = ["%PDF-1.4"], closePdf = true) {
     }
     if (fn.toString().includes("exportReady")) {
       expect(clientInitialized).toBe(true);
-      return Promise.resolve();
+      return Promise.resolve(exportReadyResult);
     }
     if (fn.toString().includes("document.title")) {
       if (!isolated) throw new Error("Document title was assigned in the main world.");
@@ -191,6 +193,7 @@ function makeHarness(pdfChunks = ["%PDF-1.4"], closePdf = true) {
     screenshotCaptureBeyondViewport: () => screenshotCaptureBeyondViewport,
     setDocumentDimensions: (width, height) => { documentDimensions = {width, height}; },
     setSnapshot: value => { snapshot = value; },
+    setExportReady: (value: { ready: boolean; waitedMs: number }) => { exportReadyResult = value; },
   };
   return { gadget, harness };
 }
@@ -302,6 +305,27 @@ describe("limitStream", () => {
 });
 
 describe("renderGadgetInBrowser", () => {
+  it("fails the export instead of capturing a blank PDF when the client never becomes ready", async () => {
+    let { gadget, harness } = makeHarness();
+    harness.setExportReady({ ready: false, waitedMs: 8000 });
+
+    await expect(renderGadgetInBrowser(
+      {} as BrowserRun,
+      "export default {}",
+      "Test Gadget",
+      gadget as never,
+      {
+        id: "pdf",
+        label: "PDF",
+        mode: "browser",
+        contentType: "application/pdf",
+        fileExtension: ".pdf",
+      },
+    )).rejects.toThrow("The Gadget was not ready to export.");
+    expect(harness.pdfRequested()).toBe(false);
+    expect(harness.browserClosed()).toBe(true);
+  });
+
   it("waits for the client module, streams a PDF, and releases the browser", async () => {
     let { stream, harness } = render();
 

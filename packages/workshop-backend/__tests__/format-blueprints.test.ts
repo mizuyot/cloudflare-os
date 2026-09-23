@@ -94,6 +94,18 @@ describe("bundled format blueprints", () => {
     }
   });
 
+  it("loads Sheets and Docs with getDocument during PDF export", async () => {
+    for (let blueprintId of ["format.spreadsheet", "format.document"] as const) {
+      let entry = FORMAT_BLUEPRINTS.find(blueprint => blueprint.blueprintId === blueprintId);
+      expect(entry, blueprintId).toBeDefined();
+      let client = await readBlueprintFile(entry!, "client.js");
+      expect(client, blueprintId).toContain("gadgetExportFormatId === \"pdf\"");
+      expect(client, blueprintId).toContain("gadget.getDocument()");
+      expect(client.indexOf("gadget.getDocument()"), blueprintId)
+        .toBeLessThan(client.indexOf("dataset.exportReady = \"1\""));
+    }
+  });
+
   it("builds the Sheets print workbook before export-ready, like Slides", async () => {
     let sheets = FORMAT_BLUEPRINTS.find(entry => entry.blueprintId === "format.spreadsheet");
     expect(sheets).toBeDefined();

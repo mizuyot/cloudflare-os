@@ -1756,24 +1756,41 @@ if (isDocumentExport) {
 
 // --- Init ------------------------------------------------------------------
 
-  try {
-    let doc = await gadget.subscribe(new DocCallbacks(), {
-      clientId, name: collaboratorName, color: collaboratorColor,
-    });
-    if (!doc.blocks) {
-      // One-time, backwards-compatible conversion of the former HTML snapshot.
-      editor.innerHTML = doc.legacyContent || "";
-      normalizeBlocks();
-      doc = await gadget.initializeBlocks({
-        blocks: serializeBlocks(), title: doc.title, senderId: clientId,
-      });
+  if (globalThis.gadgetExportFormatId === "pdf") {
+    try {
+      let doc = await gadget.getDocument();
+      if (!doc.blocks) {
+        editor.innerHTML = doc.legacyContent || "";
+        normalizeBlocks();
+        doc = await gadget.initializeBlocks({
+          blocks: serializeBlocks(), title: doc.title, senderId: clientId,
+        });
+      }
+      applySnapshot(doc);
+    } catch (e) {
+      console.error("pdf export failed to load document", e && e.message || e);
+      throw e;
     }
-    applySnapshot(doc);
-    setStatus("saved", "Saved");
-    sendPresence();
-  } catch (e) {
-    console.error(e);
-    setStatus("bad", "Offline");
+  } else {
+    try {
+      let doc = await gadget.subscribe(new DocCallbacks(), {
+        clientId, name: collaboratorName, color: collaboratorColor,
+      });
+      if (!doc.blocks) {
+        // One-time, backwards-compatible conversion of the former HTML snapshot.
+        editor.innerHTML = doc.legacyContent || "";
+        normalizeBlocks();
+        doc = await gadget.initializeBlocks({
+          blocks: serializeBlocks(), title: doc.title, senderId: clientId,
+        });
+      }
+      applySnapshot(doc);
+      setStatus("saved", "Saved");
+      sendPresence();
+    } catch (e) {
+      console.error(e);
+      setStatus("bad", "Offline");
+    }
   }
   refreshToolbarState();
   document.documentElement.dataset.exportReady = "1";

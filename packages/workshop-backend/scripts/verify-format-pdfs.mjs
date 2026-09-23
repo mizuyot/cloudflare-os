@@ -50,14 +50,28 @@ const payloads = {
   },
 };
 
-function prelude(kind) {
+function prelude(kind, { failRead = false } = {}) {
   return `
 class RpcTarget {}
 const __payload = ${JSON.stringify(payloads[kind])};
+const __failRead = ${failRead ? "true" : "false"};
 const gadget = new Proxy({}, {
   get(_t, prop) {
-    if (prop === "subscribe") return async () => __payload;
-    if (prop === "getDeck") return async () => __payload;
+    if (prop === "subscribe") {
+      return async () => { throw new Error("subscribe must not run during PDF export"); };
+    }
+    if (prop === "getDocument") {
+      return async () => {
+        if (__failRead) throw new Error("getDocument failed");
+        return __payload;
+      };
+    }
+    if (prop === "getDeck") {
+      return async () => {
+        if (__failRead) throw new Error("getDeck failed");
+        return __payload;
+      };
+    }
     if (prop === "getUndoState") return async () => ({ canUndo: false, canRedo: false });
     return async () => {};
   }
@@ -123,6 +137,30 @@ ${clientFromUnpacked(gadget)}
       }
       console.log(`ok ${kind}`, pdfPath, "chars", text.length);
     }
+
+    const failPage = await browser.newPage();
+    const failHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>
+<script type="module">
+globalThis.gadgetExportFormatId = "pdf";
+${prelude("sheets", { failRead: true })}
+${clientFromUnpacked("workspace-sheets")}
+</script></body></html>`;
+    await failPage.setContent(failHtml, { waitUntil: "load" });
+    let becameReady = false;
+    try {
+      await failPage.waitForFunction(
+        () => document.documentElement.dataset.exportReady === "1",
+        { timeout: 1500 },
+      );
+      becameReady = true;
+    } catch {
+      becameReady = false;
+    }
+    await failPage.close();
+    if (becameReady) {
+      throw new Error("failed spreadsheet read still marked the export ready");
+    }
+    console.log("ok sheets-getDocument-failure");
   } finally {
     await browser.close();
   }
