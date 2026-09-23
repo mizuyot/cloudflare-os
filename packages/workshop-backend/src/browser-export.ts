@@ -11,6 +11,7 @@ import {
   sendToBrowser,
   setDocumentTitle,
   waitForClientModule,
+  waitForDomSettled,
 } from "./generated/browser-export-page.js";
 import { createExportDeadline, limitExportStream, MAX_EXPORT_BYTES } from "./export-limits";
 
@@ -33,13 +34,18 @@ const logger = createLogger<BrowserExportLogFields>({ component: "workshop.brows
 export type PdfExportSnapshotKind = "document" | "deck";
 
 /**
- * Reads the snapshot kind a format declared. Scratch PDFs omit this and get no
- * inline snapshot. The kernel must not infer this from `output.id`.
+ * Prefers the snapshot kind a format declared. Undeclared formats fall back to
+ * the bundled `output.id` mapping so existing sheets/docs/slides still inline.
+ * Scratch gadgets match neither and get no snapshot.
  */
 export function pdfExportSnapshotKind(
   format: Pick<GadgetExportFormat, "pdfSnapshot"> | undefined,
+  outputId?: string,
 ): PdfExportSnapshotKind | undefined {
-  return format?.pdfSnapshot;
+  if (format?.pdfSnapshot) return format.pdfSnapshot;
+  if (outputId === "spreadsheet" || outputId === "document") return "document";
+  if (outputId === "presentation") return "deck";
+  return undefined;
 }
 
 /**
@@ -79,6 +85,8 @@ function classifyExportCancel(error: unknown, deadlineError: Error): string {
   return "other";
 }
 
+/** Compatibility fallback for clients that schedule DOM work outside top-level await. */
+const DOM_SETTLE_MS = 250;
 /** How long to wait for `documentElement.dataset.exportReady` before failing the export. */
 const EXPORT_READY_TIMEOUT_MS = 8_000;
 /** Budget for releasing the browser session once an export has settled. */
@@ -340,7 +348,9 @@ export async function renderGadgetInBrowser(
       mark("client.wait.start");
       await page.evaluate(waitForClientModule);
       mark("client.wait.done");
-      if (snapshot !== undefined) {
+      // Only a declared format uses the ready timeout. Fallback / scratch PDFs
+      // stay on the short traditional settle so a missing exportReady is not an error.
+      if (format.pdfSnapshot !== undefined) {
         const wait = await waitForExportReady(page);
         if (!wait.ready) {
           logger.warn("gadget export ready wait failed", {
@@ -355,6 +365,9 @@ export async function renderGadgetInBrowser(
       }
       const frame = page.mainFrame() as FrameWithIsolatedRealm;
       const isolatedRealm = frame.isolatedRealm();
+      if (format.pdfSnapshot === undefined) {
+        await isolatedRealm.evaluate(waitForDomSettled, DOM_SETTLE_MS);
+      }
       await isolatedRealm.evaluate(setDocumentTitle, documentTitle);
       switch (format.contentType) {
         case "application/pdf": {

@@ -73,6 +73,11 @@ function makeHarness(pdfChunks = ["%PDF-1.4"], closePdf = true) {
       expect(clientInitialized).toBe(true);
       return Promise.resolve(exportReadyResult);
     }
+    if (fn.toString().includes("MutationObserver")) {
+      if (!isolated) throw new Error("DOM settling ran in the main world.");
+      expect(clientInitialized).toBe(true);
+      return Promise.resolve();
+    }
     if (fn.toString().includes("document.title")) {
       if (!isolated) throw new Error("Document title was assigned in the main world.");
       expect(clientInitialized).toBe(true);
@@ -310,9 +315,15 @@ describe("limitStream", () => {
 });
 
 describe("pdf export snapshot", () => {
-  it("reads the snapshot kind a format declared, and skips undeclared formats", () => {
+  it("prefers a declared snapshot kind and falls back to bundled output ids", () => {
     expect(pdfExportSnapshotKind({ pdfSnapshot: "document" })).toBe("document");
     expect(pdfExportSnapshotKind({ pdfSnapshot: "deck" })).toBe("deck");
+    expect(pdfExportSnapshotKind({}, "spreadsheet")).toBe("document");
+    expect(pdfExportSnapshotKind({}, "document")).toBe("document");
+    expect(pdfExportSnapshotKind({}, "presentation")).toBe("deck");
+    expect(pdfExportSnapshotKind({ pdfSnapshot: "document" }, "presentation")).toBe("document");
+    expect(pdfExportSnapshotKind({ pdfSnapshot: "deck" }, "spreadsheet")).toBe("deck");
+    expect(pdfExportSnapshotKind({}, "custom")).toBeUndefined();
     expect(pdfExportSnapshotKind({})).toBeUndefined();
     expect(pdfExportSnapshotKind(undefined)).toBeUndefined();
   });
@@ -373,11 +384,35 @@ describe("renderGadgetInBrowser", () => {
         mode: "browser",
         contentType: "application/pdf",
         fileExtension: ".pdf",
+        pdfSnapshot: "document",
       },
       { title: "見積書" },
     )).rejects.toThrow("The Gadget was not ready to export.");
     expect(harness.pdfRequested()).toBe(false);
     expect(harness.browserClosed()).toBe(true);
+  });
+
+  it("skips the ready wait for an undeclared format even when a snapshot is inlined", async () => {
+    let { gadget, harness } = makeHarness();
+    harness.setExportReady({ ready: false, waitedMs: 8000 });
+
+    expect(await collect(await renderGadgetInBrowser(
+      {} as BrowserRun,
+      "export default {}",
+      "Test Gadget",
+      gadget as never,
+      {
+        id: "pdf",
+        label: "PDF",
+        mode: "browser",
+        contentType: "application/pdf",
+        fileExtension: ".pdf",
+      },
+      { title: "見積書" },
+    ))).toBe("%PDF-1.4");
+    expect(harness.pdfRequested()).toBe(true);
+    expect(decodeURIComponent(decodeURIComponent(harness.exportDocument())))
+      .toContain("globalThis.__workshopExportSnapshot");
   });
 
   it("skips the ready wait when no snapshot is inlined", async () => {
