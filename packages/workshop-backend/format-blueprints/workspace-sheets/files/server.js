@@ -349,7 +349,7 @@ const XLSX_FORMAT = {
   contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   fileExtension: ".xlsx",
 };
-const PDF_FORMAT = { id: "pdf", label: "PDF", mode: "browser", contentType: "application/pdf", fileExtension: ".pdf" };
+const PDF_FORMAT = { id: "pdf", label: "PDF", mode: "browser", contentType: "application/pdf", fileExtension: ".pdf", pdfSnapshot: "document" };
 
 // Sheet ids are client-chosen, so duplicates and over-long ids are possible in
 // stored structure. Either would fail format validation and disable every export.

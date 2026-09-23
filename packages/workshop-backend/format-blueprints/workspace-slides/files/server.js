@@ -524,7 +524,7 @@ function defaultDeck() {
 
 const SLIDES_EXPORT_FORMATS = [
   { id: "html", label: "HTML", mode: "browser", contentType: "text/html", fileExtension: ".html" },
-  { id: "pdf", label: "PDF", mode: "browser", contentType: "application/pdf", fileExtension: ".pdf" },
+  { id: "pdf", label: "PDF", mode: "browser", contentType: "application/pdf", fileExtension: ".pdf", pdfSnapshot: "deck" },
 ];
 
 export class ExportHandler extends WorkerEntrypoint {
