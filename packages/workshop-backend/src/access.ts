@@ -4,7 +4,34 @@ import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
 export type CfAccessEnv = Readonly<{
   CF_ACCESS_AUD?: string;
   CF_ACCESS_ISS?: string;
+  /** Client ID of the one Access service token allowed to enter without an email claim. */
+  CF_ACCESS_PROBE_CLIENT_ID?: string;
 }>;
+
+/** Workshop user id used when a matching Access service token is accepted. Not an admin. */
+export const ACCESS_PROBE_USER_ID = "cursor-probe";
+
+/**
+ * Maps a verified Access JWT to a Workshop user id.
+ *
+ * An email claim, when present, is the existing human path. A token with no email is accepted
+ * only when `common_name` exactly equals `CF_ACCESS_PROBE_CLIENT_ID`, and then maps to
+ * {@link ACCESS_PROBE_USER_ID}. A missing env value, a mismatched id, or any other no-email
+ * claim is rejected (same as today's email-required gate).
+ */
+export function resolveCfAccessIdentity(
+    payload: JWTPayload,
+    env: Pick<CfAccessEnv, "CF_ACCESS_PROBE_CLIENT_ID">): string | null {
+  if (typeof payload.email === "string" && payload.email.length > 0) {
+    return payload.email;
+  }
+  const expected = env.CF_ACCESS_PROBE_CLIENT_ID;
+  if (!expected) return null;
+  if (typeof payload.common_name !== "string" || payload.common_name !== expected) {
+    return null;
+  }
+  return ACCESS_PROBE_USER_ID;
+}
 
 type AccessTokenVerifier = (token: string, env: CfAccessEnv) => Promise<JWTPayload>;
 

@@ -12,7 +12,8 @@ Wrangler の認証プロファイル: `musapo`
 
 | 名前 | 役割 |
 |---|---|
-| `feat/xlsx-font` | **本番 musapo-os の正本。** 新しい作業はここから切る |
+| `feat/access-service-probe` | Access 確認トークン（`cursor-probe`）。2026-09-24 から本番に載っている。新しい作業はここから切る |
+| `feat/xlsx-font` | 一つ前の正本（xlsx フォントまで）。比較用 |
 | `feat/pdf-export-inline` | 一つ前の正本（PDF インライン取り込みまで）。比較用 |
 | `add-latest-llm-models` | 取り込み前の基準点。比較用に残してある。ここから作業を始めない |
 | `main` | 本番と歴史が分かれている（衝突 35 件）。**統合しない。ここから作業を始めない** |
@@ -22,8 +23,8 @@ Wrangler の認証プロファイル: `musapo`
 - **origin（cloudflare/cloudflare-os）には push しない**
 
 ```bash
-git checkout feat/xlsx-font
-git pull mine feat/xlsx-font
+git checkout feat/access-service-probe
+git pull mine feat/access-service-probe
 git checkout -b feat/your-work
 # 作業後
 git push -u mine HEAD
@@ -69,6 +70,7 @@ npx wrangler deploy --config wrangler.prod.jsonc --profile musapo --dry-run --ou
 - `keep_vars`: `true`
 - `CF_ACCESS_AUD`: `b75c5a68ef955594b1f5ea2117d0b7c9226cd6bc4ba48e5d00c0195fa18dd3a3`
 - `CF_ACCESS_ISS`: `https://musapo-os.cloudflareaccess.com`
+- `CF_ACCESS_PROBE_CLIENT_ID`: 確認用サービストークンの Client ID（秘密ではない。期限と入れ替えは §6）
 - バインド: `GATEKEEPER_CONTEXT` / `DISCORD` / `GOOGLE` / `SCHEDULER`、`BROWSER`、`BLUEPRINTS`、`BLUEPRINT_CONTENT`
 
 玄関（フロントの Access ビルドが終わってから）:
@@ -139,14 +141,14 @@ npx wrangler rollback 前の版ID \
   --message "理由"
 ```
 
-### 2026-09-23 時点の本番版
+### 2026-09-24 時点の本番版
 
 `wrangler deployments list` で確認した値。載せ替えたら、この表を更新すること。
 
 | | 今の本番 | 一つ前（戻す先） |
 |---|---|---|
-| 裏側 `musapo-os-backend` | `2cf74859-4f40-4c72-abca-a4767a3bf767`（PDF snapshot declaration + output.id fallback） | `42cddee1-8c31-4476-a01b-10f3d9d7a0d7`（xlsx named fonts） |
-| 玄関 `musapo-os` | `5ce10d72-5a7a-4cd8-b911-1b9f9484c196`（Access-mode frontend + PDF snapshot fallback） | `263a3cdc-cae7-463b-8fbf-9553542dbc0c`（Access-mode frontend + xlsx named fonts） |
+| 裏側 `musapo-os-backend` | `bfe9d88d-8c80-43f9-940a-681184c5e81c`（Access service-token → `cursor-probe`） | `2cf74859-4f40-4c72-abca-a4767a3bf767`（PDF snapshot declaration + output.id fallback） |
+| 玄関 `musapo-os` | `f9452365-d706-45e6-9bf0-f1e40b5b45eb`（Access-mode frontend + probe deploy） | `5ce10d72-5a7a-4cd8-b911-1b9f9484c196`（Access-mode frontend + PDF snapshot fallback） |
 
 2026-09-23 夜に宣言だけの版（裏側 `999a81e8` / 玄関 `888d80a2`）を載せたときは、すでに作ってある表の PDF が「snapshot is missing」で落ちたので `42cddee1` / `263a3cdc` に戻した。そのあと **宣言＋従来の `output.id` フォールバック** を載せて、既存の表も新しい表も PDF が出ることを確認した。
 
@@ -179,3 +181,30 @@ npx wrangler rollback 263a3cdc-cae7-463b-8fbf-9553542dbc0c \
 
 試験（`pnpm test` など）を回す前に、開発サーバーを止める。  
 稼働中に依存を入れ直すと、開発サーバーが足場を失って落ちる。
+
+---
+
+## 6. 確認用 Access サービストークン
+
+Cursor が本番を自動確認するためのトークン。人間のログイン方針は変えない。
+
+| 項目 | 値 |
+|---|---|
+| トークン名 | `musapo-os-cursor-probe` |
+| 期限 | **2027-09-24**（作成時 1 年） |
+| 運用上の入れ替え目安 | **90 日ごと。次回 2026-12-23** |
+| 秘密の置き場 | この Mac のキーチェーン。サービス名 `musapo-os-cursor-probe` |
+| Client ID | 裏側の `wrangler.prod.jsonc` の `CF_ACCESS_PROBE_CLIENT_ID`（秘密ではない） |
+| アプリの方針 | Action **Service Auth**。Include は Service Token `musapo-os-cursor-probe` だけ（Any Access Service Token にはしない） |
+| 通ったあとのユーザー | `cursor-probe`（管理者ではない。Yota の表は見えない） |
+
+漏れたら、ダッシュボードで **すぐ失効**する。入れ替えを待たない。
+
+入れ替え手順:
+
+1. ダッシュボードで新しいトークンを作る（期限 1 年でよい）
+2. Client Secret をキーチェーンに上書きする（画面・ログ・git に残さない）
+3. `wrangler.prod.jsonc` の `CF_ACCESS_PROBE_CLIENT_ID` を新しい Client ID に変え、裏側を載せる
+4. 新しいトークンで確認が通ってから、旧トークンを失効する
+
+確認スクリプト: `node scripts/verify-access-probe.mjs`（キーチェーンから読み、秘密は出さない）

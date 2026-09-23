@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { accessRateLimitKey, verifyCfAccessJwt } from "../src/access.js";
+import {
+  ACCESS_PROBE_USER_ID,
+  accessRateLimitKey,
+  resolveCfAccessIdentity,
+  verifyCfAccessJwt,
+} from "../src/access.js";
 
 const joseMocks = vi.hoisted(() => ({
   createRemoteJWKSet: vi.fn(() => vi.fn()),
@@ -62,6 +67,35 @@ describe("verifyCfAccessJwt", () => {
     await expect(verifyCfAccessJwt(request, accessEnv, verifier)).resolves.toEqual({
       sub: "user-1", email: "person@example.com",
     });
+  });
+});
+
+describe("resolveCfAccessIdentity", () => {
+  const probeClientId = "probe-client.access";
+
+  it("maps a matching service-token common_name to cursor-probe", () => {
+    expect(resolveCfAccessIdentity(
+        { common_name: probeClientId },
+        { CF_ACCESS_PROBE_CLIENT_ID: probeClientId },
+    )).toBe(ACCESS_PROBE_USER_ID);
+  });
+
+  it("rejects a mismatched common_name the same as today's no-email gate", () => {
+    expect(resolveCfAccessIdentity(
+        { common_name: "other-client.access" },
+        { CF_ACCESS_PROBE_CLIENT_ID: probeClientId },
+    )).toBeNull();
+  });
+
+  it("rejects a service token when CF_ACCESS_PROBE_CLIENT_ID is unset", () => {
+    expect(resolveCfAccessIdentity({ common_name: probeClientId }, {})).toBeNull();
+  });
+
+  it("keeps the existing email path even when a probe client id is configured", () => {
+    expect(resolveCfAccessIdentity(
+        { email: "person@example.com", common_name: probeClientId },
+        { CF_ACCESS_PROBE_CLIENT_ID: probeClientId },
+    )).toBe("person@example.com");
   });
 });
 

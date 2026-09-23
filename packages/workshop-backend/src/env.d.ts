@@ -63,6 +63,9 @@ declare global {
       // Cloudflare Access (SSO). (Also referenced via a local Env extension in server.ts.)
       CF_ACCESS_AUD?: string;   // audience
       CF_ACCESS_ISS?: string;   // team URL, e.g. https://<team>.cloudflareaccess.com
+      // Client ID of the one Access service token allowed to enter without an email claim.
+      // Maps to the non-admin user `cursor-probe`. Unset = service tokens stay 403 (today's path).
+      CF_ACCESS_PROBE_CLIENT_ID?: string;
 
       // Comma-separated allowlist of gatekeeper vendor ids permitted to drive sign-in (e.g.
       // "google,github,cloudflare"). A listed gatekeeper must also advertise providesAuth. Empty =
