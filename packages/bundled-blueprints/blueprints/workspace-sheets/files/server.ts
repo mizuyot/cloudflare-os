@@ -37,6 +37,7 @@ interface ExportFormat {
   mode: "server" | "browser";
   contentType: string;
   fileExtension: string;
+  pdfSnapshot?: "document" | "deck";
 }
 
 const DEFAULT_TITLE = "Untitled spreadsheet";
@@ -374,6 +375,7 @@ const PDF_FORMAT: ExportFormat = {
   mode: "browser",
   contentType: "application/pdf",
   fileExtension: ".pdf",
+  pdfSnapshot: "document",
 };
 
 // Sheet ids are client-chosen, so duplicates and over-long ids are possible in

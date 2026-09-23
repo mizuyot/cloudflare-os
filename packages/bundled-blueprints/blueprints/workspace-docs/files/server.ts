@@ -327,12 +327,13 @@ interface ExportFormat {
   mode: "server" | "browser";
   contentType: string;
   fileExtension: string;
+  pdfSnapshot?: "document" | "deck";
 }
 
 const DOC_EXPORT_FORMATS: ExportFormat[] = [
   { id: "markdown", label: "Markdown", mode: "server", contentType: "text/markdown", fileExtension: ".md" },
   { id: "html", label: "HTML", mode: "browser", contentType: "text/html", fileExtension: ".html" },
-  { id: "pdf", label: "PDF", mode: "browser", contentType: "application/pdf", fileExtension: ".pdf" },
+  { id: "pdf", label: "PDF", mode: "browser", contentType: "application/pdf", fileExtension: ".pdf", pdfSnapshot: "document" },
 ];
 
 export class ExportHandler extends WorkerEntrypoint {
