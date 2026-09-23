@@ -4256,6 +4256,13 @@ export type GadgetExportFormat = {
 
   /** File extension, including the leading dot. */
   fileExtension: string;
+
+  /**
+   * How the kernel should read a print snapshot before Browser Rendering.
+   * `"document"` calls `getDocument`; `"deck"` calls `getDeck`.
+   * Omit for formats that have no snapshot to inline (scratch PDFs).
+   */
+  pdfSnapshot?: "document" | "deck";
 };
 
 /**

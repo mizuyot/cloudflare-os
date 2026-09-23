@@ -29,13 +29,13 @@ const logger = createLogger<BrowserExportLogFields>({ component: "workshop.brows
 export type PdfExportSnapshotKind = "document" | "deck";
 
 /**
- * Maps a gadget's output id to the native method that returns its print snapshot.
- * Unknown outputs (scratch gadgets) have no snapshot to inline.
+ * Reads the snapshot kind a format declared. Scratch PDFs omit this and get no
+ * inline snapshot. The kernel must not infer this from `output.id`.
  */
-export function pdfExportSnapshotKind(outputId: string | undefined): PdfExportSnapshotKind | undefined {
-  if (outputId === "spreadsheet" || outputId === "document") return "document";
-  if (outputId === "presentation") return "deck";
-  return undefined;
+export function pdfExportSnapshotKind(
+  format: Pick<GadgetExportFormat, "pdfSnapshot"> | undefined,
+): PdfExportSnapshotKind | undefined {
+  return format?.pdfSnapshot;
 }
 
 /**

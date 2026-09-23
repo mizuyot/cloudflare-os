@@ -49,12 +49,21 @@ const EXPORT_FORMAT_SCHEMA: z.ZodType<GadgetExportFormat> = z.object({
   fileExtension: boundedString("fileExtension", MAX_FILE_EXTENSION_LENGTH)
     .regex(/^\.[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/,
       "Gadget export format has an invalid file extension."),
+  pdfSnapshot: z.enum(["document", "deck"]).optional(),
 }).superRefine((format, context) => {
   if (format.mode === "browser" && !BROWSER_CONTENT_TYPES.has(format.contentType)) {
     context.addIssue({
       code: "custom",
       path: ["contentType"],
       message: `Browser export format ${format.id} has an unsupported content type.`,
+    });
+  }
+  if (format.pdfSnapshot !== undefined &&
+      (format.mode !== "browser" || format.contentType !== "application/pdf")) {
+    context.addIssue({
+      code: "custom",
+      path: ["pdfSnapshot"],
+      message: `Gadget export format ${format.id} can declare pdfSnapshot only on a browser PDF.`,
     });
   }
 });
