@@ -29,13 +29,18 @@ const logger = createLogger<BrowserExportLogFields>({ component: "workshop.brows
 export type PdfExportSnapshotKind = "document" | "deck";
 
 /**
- * Reads the snapshot kind a format declared. Scratch PDFs omit this and get no
- * inline snapshot. The kernel must not infer this from `output.id`.
+ * Prefers the snapshot kind a format declared. Undeclared formats fall back to
+ * the bundled `output.id` mapping so existing sheets/docs/slides still inline.
+ * Scratch gadgets match neither and get no snapshot.
  */
 export function pdfExportSnapshotKind(
   format: Pick<GadgetExportFormat, "pdfSnapshot"> | undefined,
+  outputId?: string,
 ): PdfExportSnapshotKind | undefined {
-  return format?.pdfSnapshot;
+  if (format?.pdfSnapshot) return format.pdfSnapshot;
+  if (outputId === "spreadsheet" || outputId === "document") return "document";
+  if (outputId === "presentation") return "deck";
+  return undefined;
 }
 
 /**
@@ -293,7 +298,9 @@ export async function renderGadgetInBrowser(
       let rpcSession = new RpcSession(transport, gadget);
       sessionCloser = rpcSession.getRemoteMain();
       await page.evaluate(waitForClientModule);
-      if (snapshot !== undefined) {
+      // Only a declared format uses the ready timeout. Fallback / scratch PDFs
+      // stay on the short traditional settle so a missing exportReady is not an error.
+      if (format.pdfSnapshot !== undefined) {
         const wait = await waitForExportReady(page);
         if (!wait.ready) {
           logger.warn("gadget export ready wait failed", {
