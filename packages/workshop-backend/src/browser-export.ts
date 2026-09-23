@@ -33,13 +33,13 @@ const logger = createLogger<BrowserExportLogFields>({ component: "workshop.brows
 export type PdfExportSnapshotKind = "document" | "deck";
 
 /**
- * Maps a gadget's output id to the native method that returns its print snapshot.
- * Unknown outputs (scratch gadgets) have no snapshot to inline.
+ * Reads the snapshot kind a format declared. Scratch PDFs omit this and get no
+ * inline snapshot. The kernel must not infer this from `output.id`.
  */
-export function pdfExportSnapshotKind(outputId: string | undefined): PdfExportSnapshotKind | undefined {
-  if (outputId === "spreadsheet" || outputId === "document") return "document";
-  if (outputId === "presentation") return "deck";
-  return undefined;
+export function pdfExportSnapshotKind(
+  format: Pick<GadgetExportFormat, "pdfSnapshot"> | undefined,
+): PdfExportSnapshotKind | undefined {
+  return format?.pdfSnapshot;
 }
 
 /**
@@ -340,16 +340,18 @@ export async function renderGadgetInBrowser(
       mark("client.wait.start");
       await page.evaluate(waitForClientModule);
       mark("client.wait.done");
-      const wait = await waitForExportReady(page);
-      if (!wait.ready) {
-        logger.warn("gadget export ready wait failed", {
-          event: "gadget.export.ready.wait.failed",
-          ready: false,
-          timedOut: true,
-          waitedMs: wait.waitedMs,
-          elapsedMs: elapsedMs(),
-        });
-        throw new Error("The Gadget was not ready to export.");
+      if (snapshot !== undefined) {
+        const wait = await waitForExportReady(page);
+        if (!wait.ready) {
+          logger.warn("gadget export ready wait failed", {
+            event: "gadget.export.ready.wait.failed",
+            ready: false,
+            timedOut: true,
+            waitedMs: wait.waitedMs,
+            elapsedMs: elapsedMs(),
+          });
+          throw new Error("The Gadget was not ready to export.");
+        }
       }
       const frame = page.mainFrame() as FrameWithIsolatedRealm;
       const isolatedRealm = frame.isolatedRealm();

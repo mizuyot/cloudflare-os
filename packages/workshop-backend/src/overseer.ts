@@ -2497,10 +2497,7 @@ class OverseerImpl implements AgentHooks {
       // Read the document on this Worker before opening Browser Rendering. The export page
       // cannot call getDocument / getDeck / subscribe on the native stub (Cap'n Web `.move()`).
       let snapshot = format.contentType === "application/pdf"
-        ? await readPdfExportSnapshot(
-            exportGadget,
-            pdfExportSnapshotKind(this.getGadgetRecord(gadgetId).output?.id),
-          )
+        ? await readPdfExportSnapshot(exportGadget, pdfExportSnapshotKind(format))
         : undefined;
       return renderGadgetInBrowser(
         browser, bundle.jsCode, title, exportGadget.move(), format, snapshot,
