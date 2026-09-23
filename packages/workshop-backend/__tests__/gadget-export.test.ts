@@ -49,6 +49,40 @@ describe("Gadget export formats", () => {
     expect(formats[1]).not.toHaveProperty("ignored");
   });
 
+  it("keeps a declared pdfSnapshot on a browser PDF and omits it from defaults", () => {
+    const formats = validateExportFormats([
+      {
+        id: "pdf",
+        label: "PDF",
+        mode: "browser",
+        contentType: "application/pdf",
+        fileExtension: ".pdf",
+        pdfSnapshot: "document",
+      },
+    ]);
+    expect(formats[0].pdfSnapshot).toBe("document");
+    expect(defaultExportFormats()[1]).not.toHaveProperty("pdfSnapshot");
+  });
+
+  it("rejects pdfSnapshot on formats that are not a browser PDF", () => {
+    expect(() => validateExportFormats([{
+      id: "csv",
+      label: "CSV",
+      mode: "server",
+      contentType: "text/csv",
+      fileExtension: ".csv",
+      pdfSnapshot: "document",
+    }])).toThrow("can declare pdfSnapshot only on a browser PDF");
+    expect(() => validateExportFormats([{
+      id: "html",
+      label: "HTML",
+      mode: "browser",
+      contentType: "text/html",
+      fileExtension: ".html",
+      pdfSnapshot: "document",
+    }])).toThrow("can declare pdfSnapshot only on a browser PDF");
+  });
+
   it("rejects duplicate ids and unsupported browser content types", () => {
     const format = {
       id: "data",

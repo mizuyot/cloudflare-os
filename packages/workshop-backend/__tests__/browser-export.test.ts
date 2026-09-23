@@ -320,11 +320,10 @@ describe("limitStream", () => {
 });
 
 describe("pdf export snapshot", () => {
-  it("maps bundled output ids to the native read method", () => {
-    expect(pdfExportSnapshotKind("spreadsheet")).toBe("document");
-    expect(pdfExportSnapshotKind("document")).toBe("document");
-    expect(pdfExportSnapshotKind("presentation")).toBe("deck");
-    expect(pdfExportSnapshotKind("custom")).toBeUndefined();
+  it("reads the snapshot kind a format declared, and skips undeclared formats", () => {
+    expect(pdfExportSnapshotKind({ pdfSnapshot: "document" })).toBe("document");
+    expect(pdfExportSnapshotKind({ pdfSnapshot: "deck" })).toBe("deck");
+    expect(pdfExportSnapshotKind({})).toBeUndefined();
     expect(pdfExportSnapshotKind(undefined)).toBeUndefined();
   });
 
