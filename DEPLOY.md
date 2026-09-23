@@ -145,32 +145,31 @@ npx wrangler rollback 前の版ID \
 
 | | 今の本番 | 一つ前（戻す先） |
 |---|---|---|
-| 裏側 `musapo-os-backend` | `42cddee1-8c31-4476-a01b-10f3d9d7a0d7`（xlsx named fonts） | `2767b72c-884d-4b3d-902a-14bf75045603`（Inline PDF snapshot） |
-| 玄関 `musapo-os` | `263a3cdc-cae7-463b-8fbf-9553542dbc0c`（Access-mode frontend + xlsx named fonts） | `7e25fb86-15bb-40fc-9efc-6e3c45a803cc`（Access-mode frontend + inline PDF snapshot） |
+| 裏側 `musapo-os-backend` | `2cf74859-4f40-4c72-abca-a4767a3bf767`（PDF snapshot declaration + output.id fallback） | `42cddee1-8c31-4476-a01b-10f3d9d7a0d7`（xlsx named fonts） |
+| 玄関 `musapo-os` | `5ce10d72-5a7a-4cd8-b911-1b9f9484c196`（Access-mode frontend + PDF snapshot fallback） | `263a3cdc-cae7-463b-8fbf-9553542dbc0c`（Access-mode frontend + xlsx named fonts） |
 
-2026-09-23 夜に `pdfSnapshot` 宣言方式（裏側 `999a81e8-51fe-4580-9d11-2a1c8b98d89c` / 玄関 `888d80a2-7254-41b6-9adc-104cad2b9a8c`）を載せたが、**すでに作ってある表の PDF が「snapshot is missing」で落ちた**ため、上表の版へ戻した。コードは `feat/xlsx-font` に残っているが、本番には載せていない。
+2026-09-23 夜に宣言だけの版（裏側 `999a81e8` / 玄関 `888d80a2`）を載せたときは、すでに作ってある表の PDF が「snapshot is missing」で落ちたので `42cddee1` / `263a3cdc` に戻した。そのあと **宣言＋従来の `output.id` フォールバック** を載せて、既存の表も新しい表も PDF が出ることを確認した。
 
 一つ前へ戻す例:
 
 ```bash
 cd packages/workshop-backend
-npx wrangler rollback 2767b72c-884d-4b3d-902a-14bf75045603 \
+npx wrangler rollback 42cddee1-8c31-4476-a01b-10f3d9d7a0d7 \
   --name musapo-os-backend --config wrangler.prod.jsonc --profile musapo \
-  --message "Rollback backend to inline PDF snapshot"
+  --message "Rollback backend to xlsx named fonts"
 
 cd packages/router
-npx wrangler rollback 7e25fb86-15bb-40fc-9efc-6e3c45a803cc \
+npx wrangler rollback 263a3cdc-cae7-463b-8fbf-9553542dbc0c \
   --name musapo-os --config wrangler.prod.jsonc --profile musapo \
-  --message "Rollback router to inline PDF snapshot"
+  --message "Rollback router to xlsx named fonts"
 ```
 
 ---
 
 ## 4. 既知の制限
 
-- **2026-09-23 より前に作られた表・文書・スライドは PDF が出ない。** 作られた時点の `client.js` を保持するため。PDF が必要なら新規作成する。Excel / CSV は古い表でも出る。
 - **xlsx のフォント名は `fmt.fn` で指定できる。** 未指定は Calibri 13.5pt（画面のピクセル換算）。`fn` があるとき `fs` はポイントなので、Arial 10 は 10.0pt になる。色分け（青＝入力 / 黒＝数式 / 緑＝シート間参照）も反映される。
-- **PDF の中身取り込みは書き出し形式の `pdfSnapshot` 宣言が要る。** 表・文書は `"document"`、スライドは `"deck"`。宣言が無いと、すでに作ってある表の PDF が落ちる。git には入っているが、本番にはまだ載せていない。
+- **新しい表・文書・スライドは書き出し形式に `pdfSnapshot` を宣言する**（表・文書は `"document"`、スライドは `"deck"`）。宣言があればそれに従う。宣言が無い既存の表などは、従来どおり `output.id` で中身を取り込む。宣言が無いものは「準備完了の8秒待ち」には入らず、従来の短い待ちのまま撮る。
 - **AI Gateway の 429（Wholesale Rate limited）** が出ることがある。書き出し機能とは無関係。
 
 ---
