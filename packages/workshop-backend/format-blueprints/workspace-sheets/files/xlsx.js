@@ -225,6 +225,12 @@ function xlsxColor(value) {
   return (hex.slice(6) + hex.slice(0, 6)).toUpperCase();
 }
 
+function fontName(value) {
+  if (typeof value !== "string") return null;
+  const name = value.trim().slice(0, 64);
+  return name || null;
+}
+
 function decimals(fmt) {
   if (fmt?.d == null) return null;
   const value = Math.round(Number(fmt?.d));
@@ -251,14 +257,20 @@ class Styles {
 
   font(fmt) {
     const color = xlsxColor(fmt?.c);
-    const pixels = Math.round(Number(fmt?.fs));
-    // The grid renders `fs` in CSS pixels; Excel font sizes are points.
-    const size = Number.isFinite(pixels) && pixels >= 6 && pixels <= 96 ? pixels * 0.75 : null;
+    const name = fontName(fmt?.fn);
+    const rawSize = Number(fmt?.fs);
+    // Named fonts treat `fs` as points so "Arial 10pt" is exact. Unnamed fonts keep
+    // the grid's CSS-pixel conversion (`fs * 0.75`), which cannot represent 10pt
+    // after integer rounding (13px → 9.75pt).
+    const size = Number.isFinite(rawSize) && rawSize >= 6 && rawSize <= 96
+      ? (name ? rawSize : Math.round(rawSize) * 0.75)
+      : null;
     const font = {
       bold: Boolean(fmt?.b), italic: Boolean(fmt?.i), underline: Boolean(fmt?.u),
-      strike: Boolean(fmt?.s), color, size,
+      strike: Boolean(fmt?.s), color, size, name,
     };
-    if (!font.bold && !font.italic && !font.underline && !font.strike && !font.color && !font.size) return 0;
+    if (!font.bold && !font.italic && !font.underline && !font.strike && !font.color &&
+        !font.size && !font.name) return 0;
     const key = JSON.stringify(font);
     let id = this.fontIds.get(key);
     if (id == null) {
@@ -637,7 +649,10 @@ function* stylesXml(styles) {
     if (font.strike) yield "<strike/>";
     yield `<sz val="${font.size || 11}"/>`;
     if (font.color) yield `<color rgb="${font.color}"/>`;
-    yield '<name val="Calibri"/><family val="2"/><scheme val="minor"/></font>';
+    yield `<name val="${xmlAttribute(font.name || "Calibri")}"/>`;
+    // A theme scheme would replace a custom name with Calibri on open.
+    if (font.name) yield "<family val=\"2\"/></font>";
+    else yield '<family val="2"/><scheme val="minor"/></font>';
   }
   yield "</fonts>";
   yield `<fills count="${styles.fills.length}"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>`;

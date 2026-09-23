@@ -304,7 +304,7 @@ function sheetMeta(s) {
   };
 }
 
-const FMT_KEYS = new Set(["b", "i", "u", "s", "c", "bg", "a", "nf", "d", "fs", "wrap"]);
+const FMT_KEYS = new Set(["b", "i", "u", "s", "c", "bg", "a", "nf", "d", "fs", "fn", "wrap"]);
 function sanitizeFmt(fmt) {
   if (!fmt || typeof fmt !== "object") return null;
   const out = {};
@@ -315,6 +315,10 @@ function sanitizeFmt(fmt) {
     else if (k === "nf") { out[k] = String(v).slice(0, 20); }
     else if (k === "d") { const n = Math.round(Number(v)); if (n >= 0 && n <= 10) out[k] = n; }
     else if (k === "fs") { const n = Math.round(Number(v)); if (n >= 6 && n <= 96) out[k] = n; }
+    else if (k === "fn") {
+      const name = String(v).trim().slice(0, 64);
+      if (name) out[k] = name;
+    }
     else out[k] = true;
   }
   return Object.keys(out).length ? out : null;

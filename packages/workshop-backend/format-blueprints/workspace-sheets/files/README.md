@@ -152,7 +152,7 @@ await gadget.applyOperation({
 
 Omitting an existing sheet from `sheetOrder` deletes it and its stored cells. Adding a new sheet ID creates empty storage for it. When adding a sheet and its initial data together, include both `structure` and a matching `sheetReplacements` entry in the same operation.
 
-Formatting keys accepted by the server are `b` (bold), `i` (italic), `u` (underline), `s` (strikethrough), `c` (text color), `bg` (fill color), `a` (`l`, `c`, or `r` alignment), `nf` (number format), `d` (decimal places), `fs` (font size), and `wrap`. Colors must be hexadecimal strings such as `#1d1d20`.
+Formatting keys accepted by the server are `b` (bold), `i` (italic), `u` (underline), `s` (strikethrough), `c` (text color), `bg` (fill color), `a` (`l`, `c`, or `r` alignment), `nf` (number format), `d` (decimal places), `fs` (font size), `fn` (font name, e.g. `Arial`), and `wrap`. Colors must be hexadecimal strings such as `#1d1d20`. When `fn` is set, `fs` is points in Excel (so `fn: "Arial", fs: 10` is Arial 10pt). Without `fn`, `fs` stays CSS pixels and Excel size is `fs × 0.75` (the previous 13px → 9.75pt rounding).
 
 ## Architecture
 
@@ -218,7 +218,7 @@ browser-computed display values. Fields use standard CSV quoting and CRLF line e
 ## XLSX export
 
 **Excel Workbook** exports one XLSX file with the worksheets in workbook order. Cells keep their
-font, color, fill, alignment, number format, decimal places and wrapping; sheets keep column widths,
+font name, color, fill, alignment, number format, decimal places and wrapping; sheets keep column widths,
 row heights and frozen panes. Pixel sizes are converted to points (rows, fonts) or approximate
 character widths (columns), so layout is close but not pixel-identical.
 

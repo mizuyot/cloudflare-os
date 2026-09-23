@@ -1769,7 +1769,8 @@ function renderCell(ref, r, c, rng) {
     if (fmt.u || fmt.s) td.style.textDecoration = (fmt.u ? "underline " : "") + (fmt.s ? "line-through" : "");
     if (fmt.c) td.style.color = fmt.c;
     if (fmt.bg) td.style.background = fmt.bg;
-    if (fmt.fs) td.style.fontSize = fmt.fs + "px";
+    if (fmt.fn) td.style.fontFamily = fmt.fn;
+    if (fmt.fs) td.style.fontSize = fmt.fn ? fmt.fs + "pt" : fmt.fs + "px";
     if (fmt.a) cv.style.textAlign = fmt.a === "l" ? "left" : fmt.a === "c" ? "center" : "right";
     if (fmt.wrap) td.classList.add("wrap");
     if (disp.center && !fmt.a) cv.style.textAlign = "center";
@@ -1815,7 +1816,8 @@ function renderPrintCell(sheetId, ref, r, c) {
     if (fmt.u || fmt.s) td.style.textDecoration = (fmt.u ? "underline " : "") + (fmt.s ? "line-through" : "");
     if (fmt.c) td.style.color = fmt.c;
     if (fmt.bg) td.style.background = fmt.bg;
-    if (fmt.fs) td.style.fontSize = fmt.fs + "px";
+    if (fmt.fn) td.style.fontFamily = fmt.fn;
+    if (fmt.fs) td.style.fontSize = fmt.fn ? fmt.fs + "pt" : fmt.fs + "px";
     if (fmt.a) cv.style.textAlign = fmt.a === "l" ? "left" : fmt.a === "c" ? "center" : "right";
     if (fmt.wrap) td.classList.add("wrap");
     if (disp.center && !fmt.a) cv.style.textAlign = "center";
@@ -1986,6 +1988,8 @@ function startEdit(ref, replace = false, seed = null) {
   const f = cell?.fmt || {};
   cellEditor.style.fontWeight = f.b ? "700" : "400";
   cellEditor.style.fontStyle = f.i ? "italic" : "normal";
+  cellEditor.style.fontFamily = f.fn || "";
+  cellEditor.style.fontSize = f.fs ? (f.fn ? f.fs + "pt" : f.fs + "px") : "";
   cellEditor.style.textAlign = f.a === "c" ? "center" : f.a === "r" ? "right" : "left";
   cellEditor.focus();
   if (replace || seed != null) { const L = cellEditor.value.length; cellEditor.setSelectionRange(L, L); }
