@@ -147,8 +147,8 @@ npx wrangler rollback 前の版ID \
 
 | | 今の本番 | 一つ前（戻す先） |
 |---|---|---|
-| 裏側 `musapo-os-backend` | `bfe9d88d-8c80-43f9-940a-681184c5e81c`（Access service-token → `cursor-probe`） | `2cf74859-4f40-4c72-abca-a4767a3bf767`（PDF snapshot declaration + output.id fallback） |
-| 玄関 `musapo-os` | `f9452365-d706-45e6-9bf0-f1e40b5b45eb`（Access-mode frontend + probe deploy） | `5ce10d72-5a7a-4cd8-b911-1b9f9484c196`（Access-mode frontend + PDF snapshot fallback） |
+| 裏側 `musapo-os-backend` | `cddef546-cb6d-48a3-a6a0-760eb4c695d6`（429 の最後の失敗を日本語に） | `bfe9d88d-8c80-43f9-940a-681184c5e81c`（Access service-token → `cursor-probe`） |
+| 玄関 `musapo-os` | `37c7a6c9-b739-4541-94be-752cb768baea`（Access-mode frontend + 日本語 429） | `f9452365-d706-45e6-9bf0-f1e40b5b45eb`（Access-mode frontend + probe deploy） |
 
 2026-09-23 夜に宣言だけの版（裏側 `999a81e8` / 玄関 `888d80a2`）を載せたときは、すでに作ってある表の PDF が「snapshot is missing」で落ちたので `42cddee1` / `263a3cdc` に戻した。そのあと **宣言＋従来の `output.id` フォールバック** を載せて、既存の表も新しい表も PDF が出ることを確認した。
 
@@ -172,7 +172,7 @@ npx wrangler rollback 263a3cdc-cae7-463b-8fbf-9553542dbc0c \
 
 - **xlsx のフォント名は `fmt.fn` で指定できる。** 未指定は Calibri 13.5pt（画面のピクセル換算）。`fn` があるとき `fs` はポイントなので、Arial 10 は 10.0pt になる。色分け（青＝入力 / 黒＝数式 / 緑＝シート間参照）も反映される。
 - **新しい表・文書・スライドは書き出し形式に `pdfSnapshot` を宣言する**（表・文書は `"document"`、スライドは `"deck"`）。宣言があればそれに従う。宣言が無い既存の表などは、従来どおり `output.id` で中身を取り込む。宣言が無いものは「準備完了の8秒待ち」には入らず、従来の短い待ちのまま撮る。
-- **AI Gateway の 429（Wholesale Rate limited）** が出ることがある。書き出し機能とは無関係。
+- **AI Gateway の 429（Wholesale Rate limited）** が出ることがある。書き出し機能とは無関係。最後まで失敗したときは「混雑しています。Retry を押すか、少し待ってください」と出す。
 - **インライン取り込み（2026-09-23 14:28 JST）より前に作った文書は、当時の client.js のまま。** 例: `PDFPROBE-DOCS`（会話 13:00 JST）。同じ接続で HTML のあと PDF を出すと `move` が無いと言われることがある。画面を開き直して PDF だけ出す。
 
 ---
@@ -208,3 +208,34 @@ Cursor が本番を自動確認するためのトークン。人間のログイ�
 4. 新しいトークンで確認が通ってから、旧トークンを失効する
 
 確認スクリプト: `node scripts/verify-access-probe.mjs`（キーチェーンから読み、秘密は出さない）
+
+---
+
+## 7. AI Gateway の Dynamic Route（`dynamic/primary`）
+
+Gateway: `musapo-os-ai`  
+ルート名: `primary`（呼び出しは `dynamic/primary`）  
+ルート ID: `46001cd2-2c34-4112-b5c6-95c87a962b6d`
+
+**モデル欄に提供元の接頭辞（`anthropic/` など）を重ねない。** 重ねると第一候補がすぐ失敗してログにも残らず、毎回次の箱に落ちる（2026-09 の 4.6 失敗の原因）。
+
+### 今の公開（2026-09-24）
+
+| 順 | 提供元 | モデル欄 | 失敗したら |
+|---|---|---|---|
+| 1 | Anthropic | `claude-sonnet-5` | 2 へ |
+| 2 | Google AI Studio | `gemini-2.5-pro` | 3 へ |
+| 3 | OpenAI | `gpt-5.6-sol` | エラー |
+
+公開版: `4c91f893-e156-4f38-b1b2-b8e728483464`  
+公開デプロイ: `f6c0acf2-c94b-432c-b88d-af8c84ff384e`
+
+### 変更前（戻す先）
+
+1. Anthropic / `anthropic/claude-sonnet-4.6`（接頭辞が重なっていた）
+2. Google AI Studio / `gemini-2.5-pro`
+
+公開版: `d29bf732-3422-4b16-804f-c2f9f0ecdf5c`  
+公開デプロイ: `d59c54be-4d2e-4799-af09-8507490f8d15`（2026-09-01 07:05 UTC）
+
+戻し方: ダッシュボードの Dynamic Routes → `primary` → Versions で上の変更前の版を Deploy する。API なら `POST .../routes/46001cd2-2c34-4112-b5c6-95c87a962b6d/deployments` に `{ "version_id": "d29bf732-3422-4b16-804f-c2f9f0ecdf5c" }`。

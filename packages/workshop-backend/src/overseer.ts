@@ -35,7 +35,8 @@ import { checkUsageAndBalance } from "./ai-gateway-billing/limits/usage-checker"
 import { completeAgentCatalogSnapshot, normalizeAgentCatalog } from "./agent-catalog";
 import { refreshCachedBalance } from "./ai-gateway-billing/cloudflare/connection-service";
 import {
-  FC_INFERENCE_UNAVAILABLE_MESSAGE, isInferenceCreditError,
+  FC_INFERENCE_BUSY_MESSAGE, FC_INFERENCE_UNAVAILABLE_MESSAGE,
+  isInferenceBusyError, isInferenceCreditError,
 } from "@gadgets/workshop-shared/limits";
 import { SharingManager, SharingCaller, CollaboratorRecord, ShareKeyRecord } from "./sharing";
 import { AutoApprovalDrainer } from "./auto-approval";
@@ -4127,6 +4128,8 @@ class OverseerImpl implements AgentHooks {
       let errorMessage = stringifyError(err);
       if (isInferenceCreditError(errorMessage, apiError?.statusCode)) {
         errorMessage = FC_INFERENCE_UNAVAILABLE_MESSAGE;
+      } else if (isInferenceBusyError(errorMessage, apiError?.statusCode)) {
+        errorMessage = FC_INFERENCE_BUSY_MESSAGE;
       }
       if (apiError) {
         turnLogger.error("runAgent failed", {

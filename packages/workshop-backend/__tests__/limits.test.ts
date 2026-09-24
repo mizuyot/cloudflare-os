@@ -1,9 +1,25 @@
 import { describe, it, expect } from "vitest";
 import {
   canProceedWithRequest,
+  FC_INFERENCE_BUSY_MESSAGE,
   hasMinimumBalance,
+  isInferenceBusyError,
+  isInferenceCreditError,
   MINIMUM_CLOUDFLARE_BALANCE,
 } from "@gadgets/workshop-shared/limits";
+
+describe("isInferenceBusyError", () => {
+  it("treats a 429 without credit wording as busy (retryable)", () => {
+    expect(isInferenceBusyError("Wholesale Rate limited", 429)).toBe(true);
+    expect(isInferenceCreditError("Wholesale Rate limited", 429)).toBe(false);
+    expect(FC_INFERENCE_BUSY_MESSAGE).toMatch(/Retry/);
+  });
+
+  it("does not treat credit 429s as busy", () => {
+    expect(isInferenceBusyError("quota exceeded", 429)).toBe(false);
+    expect(isInferenceCreditError("quota exceeded", 429)).toBe(true);
+  });
+});
 
 describe("hasMinimumBalance", () => {
   it("rejects null/undefined balances", () => {

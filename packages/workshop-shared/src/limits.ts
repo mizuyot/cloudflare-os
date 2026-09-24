@@ -22,11 +22,22 @@ export function insufficientBalanceMessage(minimum: number = MINIMUM_CLOUDFLARE_
 export const FC_INFERENCE_UNAVAILABLE_MESSAGE =
     "現在応答できません。管理者に連絡してください";
 
+// Shown when the last hop on the gateway route is rate-limited (e.g. Wholesale 429).
+// Distinct from credit exhaustion: the user can retry.
+export const FC_INFERENCE_BUSY_MESSAGE =
+    "混雑しています。Retry を押すか、少し待ってください";
+
 export function isInferenceCreditError(message: string, statusCode?: number): boolean {
   if (statusCode === 402) return true;
   const text = message.toLowerCase();
   if (statusCode === 429 && /credit|quota|billing|balance|payment/.test(text)) return true;
   return /insufficient (credit|funds|balance)|credit(?:s)? (?:exhausted|depleted)|payment required|out of credits|quota exceeded/.test(text);
+}
+
+export function isInferenceBusyError(message: string, statusCode?: number): boolean {
+  if (isInferenceCreditError(message, statusCode)) return false;
+  if (statusCode === 429) return true;
+  return /wholesale rate limited|rate.?limited|too many requests/.test(message.toLowerCase());
 }
 
 // User-facing messages for limit violations.
