@@ -12,7 +12,8 @@ Wrangler の認証プロファイル: `musapo`
 
 | 名前 | 役割 |
 |---|---|
-| `feat/access-service-probe` | Access 確認トークン（`cursor-probe`）。2026-09-24 から本番に載っている。新しい作業はここから切る |
+| `feat/jp-rate-limit-message` | 正本。429 の日本語表示と Dynamic Route（Sonnet 5 → Gemini 3.1 Pro → GPT-5.6 Sol）。新しい作業はここから切る |
+| `feat/access-service-probe` | 一つ前の正本（Access 確認トークン `cursor-probe`）。比較用 |
 | `feat/xlsx-font` | 一つ前の正本（xlsx フォントまで）。比較用 |
 | `feat/pdf-export-inline` | 一つ前の正本（PDF インライン取り込みまで）。比較用 |
 | `add-latest-llm-models` | 取り込み前の基準点。比較用に残してある。ここから作業を始めない |
@@ -23,8 +24,8 @@ Wrangler の認証プロファイル: `musapo`
 - **origin（cloudflare/cloudflare-os）には push しない**
 
 ```bash
-git checkout feat/access-service-probe
-git pull mine feat/access-service-probe
+git checkout feat/jp-rate-limit-message
+git pull mine feat/jp-rate-limit-message
 git checkout -b feat/your-work
 # 作業後
 git push -u mine HEAD
@@ -219,23 +220,24 @@ Gateway: `musapo-os-ai`
 
 **モデル欄に提供元の接頭辞（`anthropic/` など）を重ねない。** 重ねると第一候補がすぐ失敗してログにも残らず、毎回次の箱に落ちる（2026-09 の 4.6 失敗の原因）。
 
-### 今の公開（2026-09-24）
+### 今の公開（2026-09-29）
 
 | 順 | 提供元 | モデル欄 | 失敗したら |
 |---|---|---|---|
 | 1 | Anthropic | `claude-sonnet-5` | 2 へ |
-| 2 | Google AI Studio | `gemini-2.5-pro` | 3 へ |
+| 2 | Google AI Studio | `gemini-3.1-pro-preview`（一覧上の Gemini 3.1 Pro） | 3 へ |
 | 3 | OpenAI | `gpt-5.6-sol` | エラー |
 
-公開版: `4c91f893-e156-4f38-b1b2-b8e728483464`  
-公開デプロイ: `f6c0acf2-c94b-432c-b88d-af8c84ff384e`
+公開版: `a16c26cb-0ea8-4b8c-8f1c-dec9aeb3d2f2`  
+公開デプロイ: `4f3f3e90-8c41-49bf-a377-d2a38ba1cc17`
 
 ### 変更前（戻す先）
 
-1. Anthropic / `anthropic/claude-sonnet-4.6`（接頭辞が重なっていた）
+1. Anthropic / `claude-sonnet-5`
 2. Google AI Studio / `gemini-2.5-pro`
+3. OpenAI / `gpt-5.6-sol`
 
-公開版: `d29bf732-3422-4b16-804f-c2f9f0ecdf5c`  
-公開デプロイ: `d59c54be-4d2e-4799-af09-8507490f8d15`（2026-09-01 07:05 UTC）
+公開版: `4c91f893-e156-4f38-b1b2-b8e728483464`  
+公開デプロイ: `f6c0acf2-c94b-432c-b88d-af8c84ff384e`（2026-09-24）
 
-戻し方: ダッシュボードの Dynamic Routes → `primary` → Versions で上の変更前の版を Deploy する。API なら `POST .../routes/46001cd2-2c34-4112-b5c6-95c87a962b6d/deployments` に `{ "version_id": "d29bf732-3422-4b16-804f-c2f9f0ecdf5c" }`。
+戻し方: ダッシュボードの Dynamic Routes → `primary` → Versions で上の変更前の版を Deploy する。API なら `POST .../routes/46001cd2-2c34-4112-b5c6-95c87a962b6d/deployments` に `{ "version_id": "4c91f893-e156-4f38-b1b2-b8e728483464" }`。
